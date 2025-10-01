@@ -1,0 +1,11 @@
+F:\WebstormProjects\anki-dict\packages\dict-reader\target\x86_64-pc-windows-msvc\release\deps\ripemd-60f0dfbee19f0635.d: C:\Users\yhyfc\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ripemd-0.1.3\src\lib.rs C:\Users\yhyfc\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ripemd-0.1.3\src\c128.rs C:\Users\yhyfc\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ripemd-0.1.3\src\c160.rs C:\Users\yhyfc\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ripemd-0.1.3\src\c256.rs C:\Users\yhyfc\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ripemd-0.1.3\src\c320.rs
+
+F:\WebstormProjects\anki-dict\packages\dict-reader\target\x86_64-pc-windows-msvc\release\deps\libripemd-60f0dfbee19f0635.rlib: C:\Users\yhyfc\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ripemd-0.1.3\src\lib.rs C:\Users\yhyfc\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ripemd-0.1.3\src\c128.rs C:\Users\yhyfc\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ripemd-0.1.3\src\c160.rs C:\Users\yhyfc\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ripemd-0.1.3\src\c256.rs C:\Users\yhyfc\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ripemd-0.1.3\src\c320.rs
+
+F:\WebstormProjects\anki-dict\packages\dict-reader\target\x86_64-pc-windows-msvc\release\deps\libripemd-60f0dfbee19f0635.rmeta: C:\Users\yhyfc\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ripemd-0.1.3\src\lib.rs C:\Users\yhyfc\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ripemd-0.1.3\src\c128.rs C:\Users\yhyfc\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ripemd-0.1.3\src\c160.rs C:\Users\yhyfc\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ripemd-0.1.3\src\c256.rs C:\Users\yhyfc\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ripemd-0.1.3\src\c320.rs
+
+C:\Users\yhyfc\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ripemd-0.1.3\src\lib.rs:
+C:\Users\yhyfc\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ripemd-0.1.3\src\c128.rs:
+C:\Users\yhyfc\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ripemd-0.1.3\src\c160.rs:
+C:\Users\yhyfc\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ripemd-0.1.3\src\c256.rs:
+C:\Users\yhyfc\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ripemd-0.1.3\src\c320.rs:

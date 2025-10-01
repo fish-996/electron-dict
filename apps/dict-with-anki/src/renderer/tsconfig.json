@@ -1,0 +1,19 @@
+{
+    "extends": "../../tsconfig.json",
+    "compilerOptions": {
+        "jsxImportSource": "react",
+        "composite": true,
+        "jsx": "react-jsx",
+        "baseUrl": ".",
+        "paths": {
+            "@preload-api": ["../../dist-types/src/preload/index.d.ts"],
+            "@renderer/*": ["src/*"]
+        }
+    },
+    "include": [
+        "src/**/*.ts",
+        "src/**/*.tsx",
+        "src/types.d.ts",
+        "../../dist-types/src/preload/index.d.ts"
+    ]
+}

@@ -1,0 +1,21 @@
+{
+    "compilerOptions": {
+        /* --- Output Generation --- */
+        "declaration": true, // Generate .d.ts files
+        "declarationMap": true, // Optional: Creates source maps for .d.ts files for better IDE navigation
+        "outDir": "./dist", // Redirect output structure to the directory
+        "rootDir": "./src/ts", // Specify the root directory of input files
+
+        /* --- Your Existing Options (all good) --- */
+        "target": "es2016",
+        "module": "commonjs",
+        "esModuleInterop": true,
+        "forceConsistentCasingInFileNames": true,
+        "strict": true,
+        "skipLibCheck": true
+    },
+    "include": [
+        "src/ts/**/*.ts" // Compile all TypeScript files inside the src/ts directory
+    ],
+    "exclude": ["node_modules", "dist"]
+}

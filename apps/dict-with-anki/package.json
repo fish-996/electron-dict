@@ -1,0 +1,49 @@
+{
+    "name": "@dict/app",
+    "version": "1.0.0",
+    "description": "",
+    "main": "out/main/index.js",
+    "scripts": {
+        "dev": "electron-vite dev",
+        "frontend-build": "electron-vite build",
+        "build": "electron-vite build && electron-builder",
+        "type:preload": "tsc -p tsconfig.preload.d.ts.json",
+        "lint": "eslint .",
+        "format": "prettier --write ."
+    },
+    "type": "module",
+    "private": true,
+    "devDependencies": {
+        "@electron-toolkit/utils": "^4.0.0",
+        "@eslint/js": "^9.36.0",
+        "@types/lodash-es": "^4.17.12",
+        "@types/react": "^19.1.13",
+        "@types/react-dom": "^19.1.9",
+        "@vitejs/plugin-react": "^5.0.3",
+        "electron": "^38.1.2",
+        "electron-builder": "^26.0.12",
+        "electron-vite": "^4.0.0",
+        "fs-extra": "^11.3.2",
+        "tar": "^7.4.4",
+        "vite": "^7.1.6"
+    },
+    "dependencies": {
+        "js-mdict": "^6.0.8",
+        "lodash-es": "^4.17.21",
+        "react": "^19.1.1",
+        "react-dom": "^19.1.1",
+        "@dict/speex-wasm-decoder": "workspace:*"
+    },
+    "build": {
+        "appId": "com.yourcompany.ankidict",
+        "productName": "Anki Dict",
+        "directories": {
+            "output": "dist",
+            "buildResources": "build"
+        },
+        "npmRebuild": false,
+        "files": [
+            "out/**"
+        ]
+    }
+}

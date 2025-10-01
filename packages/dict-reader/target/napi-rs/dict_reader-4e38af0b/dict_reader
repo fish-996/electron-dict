@@ -1,0 +1,3 @@
+{"kind": "interface", "name": "MdictEntry", "js_doc": "", "def": "word: string\\ndefinition: string", "original_name": "MdictEntry"}
+{"kind": "impl", "name": "WordQueryTask", "js_doc": "", "def": ""}
+{"kind": "fn", "name": "queryWordAsync", "js_doc": "", "def": "function queryWordAsync(mdxPath: string, word: string): Promise<MdictEntry | null>"}

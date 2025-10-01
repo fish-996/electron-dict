@@ -1,0 +1,26 @@
+
+[package]
+authors = ["LongYinan <lynweklm@gmail.com>"]
+edition = "2021"
+name    = "dict_reader"
+version = "0.1.0"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+napi = { version = "3", default-features = false, features = [
+  "napi4",
+  "tokio_rt",
+] }
+napi-derive = "3.0.0"
+
+anyhow       = "1.0"
+mdict-parser = "0.1.1"
+
+[build-dependencies]
+napi-build = "2"
+
+[profile.release]
+lto   = true
+strip = "symbols"

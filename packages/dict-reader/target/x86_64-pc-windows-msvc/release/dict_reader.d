@@ -1,0 +1,1 @@
+F:\WebstormProjects\anki-dict\packages\dict-reader\target\x86_64-pc-windows-msvc\release\dict_reader.dll: F:\WebstormProjects\anki-dict\packages\dict-reader\build.rs F:\WebstormProjects\anki-dict\packages\dict-reader\src\lib.rs
