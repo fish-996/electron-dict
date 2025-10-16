@@ -1,8 +1,20 @@
-import { app, BrowserWindow, shell, ipcMain } from "electron";
+import { app, BrowserWindow, shell, ipcMain, dialog } from "electron";
 import { join } from "path";
 import { electronApp, optimizer, is } from "@electron-toolkit/utils";
-import { dictionaryService } from "./dictionaryService";
+import {
+    dictionaryService,
+    type LookupResult,
+    type ResourceResult,
+} from "./dictionaryService";
 import type { KeyWordItem, FuzzyWord } from "js-mdict";
+import Store from "electron-store";
+
+// 初始化持久化存储
+const store = new Store({
+    defaults: {
+        dictionaryPaths: [], // 默认没有词典
+    },
+});
 
 process.on("uncaughtException", (error) => {
     console.error("--- [全局未捕获异常] ---");
@@ -49,8 +61,9 @@ app.whenReady().then(async () => {
     });
 
     try {
-        console.log("Initializing dictionary service...");
-        await dictionaryService.init();
+        console.log("Initializing dictionary service with stored paths...");
+        const storedPaths = store.get("dictionaryPaths") as string[];
+        await dictionaryService.init(storedPaths);
         console.log("Dictionary service initialization complete.");
     } catch (error) {
         console.error("FATAL: Could not initialize dictionary service.", error);
@@ -65,27 +78,37 @@ app.whenReady().then(async () => {
     // --- 设置 IPC 监听器 ---
     ipcMain.handle(
         "dict:lookup",
-        (_event, word: string): Promise<string | null> =>
+        (_event, word: string): Promise<LookupResult[]> =>
             dictionaryService.lookup(word),
     );
-    ipcMain.handle("dict:getResource", (_event, resourceKey: string) =>
-        dictionaryService.getResource(resourceKey),
+
+    ipcMain.handle(
+        "dict:getResource",
+        (
+            _event,
+            { key, dictionaryName }: { key: string; dictionaryName: string },
+        ): Promise<ResourceResult | null> =>
+            dictionaryService.getResource(key, dictionaryName),
     );
+
     ipcMain.handle(
         "dict:getSuggestions",
         (_event, prefix: string): Promise<string[]> =>
             dictionaryService.getSuggestions(prefix),
     );
+
     ipcMain.handle(
         "dict:getAssociatedWords",
         (_event, phrase: string): Promise<KeyWordItem[]> =>
             dictionaryService.getAssociatedWords(phrase),
     );
+
     ipcMain.handle(
         "dict:getSpellingSuggestions",
         (_event, phrase: string, distance?: number): Promise<KeyWordItem[]> =>
             dictionaryService.getSpellingSuggestions(phrase, distance),
     );
+
     ipcMain.handle(
         "dict:fuzzySearch",
         (
@@ -95,6 +118,42 @@ app.whenReady().then(async () => {
             ed_gap?: number,
         ): Promise<FuzzyWord[]> =>
             dictionaryService.fuzzySearch(word, fuzzy_size, ed_gap),
+    );
+
+    // --- 用于管理词典路径的 IPC 监听器 ---
+    ipcMain.handle("settings:get-dictionary-paths", () => {
+        return store.get("dictionaryPaths") as string[];
+    });
+
+    ipcMain.handle("settings:add-dictionaries", async (event) => {
+        const window = BrowserWindow.fromWebContents(event.sender);
+        if (!window) return store.get("dictionaryPaths");
+
+        const { filePaths } = await dialog.showOpenDialog(window, {
+            title: "选择词典文件",
+            properties: ["openFile", "multiSelections"],
+            filters: [{ name: "Mdict 词典", extensions: ["mdx"] }],
+        });
+
+        if (filePaths && filePaths.length > 0) {
+            const currentPaths = store.get("dictionaryPaths") as string[];
+            const newPaths = [...new Set([...currentPaths, ...filePaths])];
+            store.set("dictionaryPaths", newPaths);
+            await dictionaryService.reload(newPaths);
+            return newPaths;
+        }
+        return store.get("dictionaryPaths");
+    });
+
+    ipcMain.handle(
+        "settings:remove-dictionary",
+        async (_event, pathToRemove: string) => {
+            let currentPaths = store.get("dictionaryPaths") as string[];
+            currentPaths = currentPaths.filter((p) => p !== pathToRemove);
+            store.set("dictionaryPaths", currentPaths);
+            await dictionaryService.reload(currentPaths);
+            return currentPaths;
+        },
     );
 });
 

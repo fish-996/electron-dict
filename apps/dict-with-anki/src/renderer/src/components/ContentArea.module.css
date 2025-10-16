@@ -1,0 +1,47 @@
+/* src/components/ContentArea.module.css */
+
+.content {
+    flex-grow: 1;
+    padding: 20px;
+    overflow-y: auto;
+}
+
+/* Styles for the DefinitionBlock component and other content states */
+.loader {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100%;
+    color: #888;
+    font-size: 1.2rem;
+}
+
+.welcome {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    height: 100%;
+    text-align: center;
+    color: #888;
+}
+
+.welcome h1 {
+    font-size: 2rem;
+    color: #ccc;
+    margin-bottom: 10px;
+}
+
+.definitionTitle {
+    font-size: 1.4em;
+    font-weight: 600;
+    color: #4fc3f7; /* A lighter blue */
+    margin-top: 25px;
+    margin-bottom: 15px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #333;
+}
+
+.firstTitle {
+    margin-top: 0;
+}

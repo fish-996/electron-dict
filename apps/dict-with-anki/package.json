@@ -7,7 +7,8 @@
         "dev": "electron-vite dev",
         "frontend-build": "electron-vite build",
         "build": "electron-vite build && electron-builder",
-        "type:preload": "tsc -p tsconfig.preload.d.ts.json",
+        "type:preload": "tsc -p tsconfig.preload.json",
+        "type-check": "tsc --noEmit --jsx react-jsx -p ./tsconfig.node.json",
         "lint": "eslint .",
         "format": "prettier --write ."
     },
@@ -28,11 +29,12 @@
         "vite": "^7.1.6"
     },
     "dependencies": {
+        "@dict/speex-wasm-decoder": "workspace:*",
+        "electron-store": "^11.0.2",
         "js-mdict": "^6.0.8",
         "lodash-es": "^4.17.21",
         "react": "^19.1.1",
-        "react-dom": "^19.1.1",
-        "@dict/speex-wasm-decoder": "workspace:*"
+        "react-dom": "^19.1.1"
     },
     "build": {
         "appId": "com.yourcompany.ankidict",

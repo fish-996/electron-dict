@@ -1,0 +1,110 @@
+/* src/SettingsModal.module.css */
+
+.modalOverlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.6);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+}
+
+.modalContent {
+    background-color: #2e2e2e;
+    padding: 20px;
+    border-radius: 8px;
+    width: 80%;
+    max-width: 700px;
+    max-height: 80vh;
+    display: flex;
+    flex-direction: column;
+}
+
+.modalHeader {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid #444;
+    padding-bottom: 10px;
+    margin-bottom: 15px;
+}
+
+.modalHeader h2 {
+    margin: 0;
+}
+
+.closeButton {
+    background: none;
+    border: none;
+    font-size: 1.5rem;
+    color: #aaa;
+    cursor: pointer;
+}
+
+.modalBody {
+    flex-grow: 1;
+    overflow-y: auto;
+}
+
+.dictList {
+    list-style-type: none;
+    padding: 0;
+    margin: 0;
+}
+
+.dictItem {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px;
+    border-bottom: 1px solid #3a3a3a;
+}
+
+.dictItem:last-child {
+    border-bottom: none;
+}
+
+.dictPath {
+    flex-grow: 1;
+    margin-right: 15px;
+    word-break: break-all;
+    font-size: 0.9em;
+    color: #ccc;
+}
+
+.removeButton {
+    background-color: #b71c1c;
+    color: white;
+    border: none;
+    padding: 5px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.removeButton:disabled {
+    background-color: #555;
+}
+
+.modalFooter {
+    border-top: 1px solid #444;
+    padding-top: 15px;
+    margin-top: 15px;
+    text-align: right;
+}
+
+.modalFooter button {
+    background-color: #007bff;
+    color: white;
+    padding: 10px 15px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.modalFooter button:disabled {
+    background-color: #555;
+}

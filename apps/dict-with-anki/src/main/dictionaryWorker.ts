@@ -1,14 +1,20 @@
-// dictionaryWorker.ts
-
 import { parentPort } from "worker_threads";
-import { MDX, MDD, KeyWordItem } from "js-mdict";
+import { MDX, MDD, KeyWordItem, FuzzyWord } from "js-mdict";
 import * as path from "path";
 import * as fs from "fs";
-// --- 新增 ---
-// 在 Worker 中引入转换函数
 import { convertSpxToWav } from "@dict/speex-wasm-decoder";
 
-type MdictLookupResult = { keyText: string; definition: string }; // definition is base64 string
+// 定义一个结构来包装每个词典实例及其关联的MDD文件
+interface DictionaryInstance {
+    name: string; // 词典文件名，用作唯一标识符
+    mdx: MDX;
+    mdds: MDD[];
+}
+
+// 结果类型定义
+type MdictLookupResult = { keyText: string; definition: string };
+
+// Worker 消息接口
 interface WorkerMessage {
     id: number;
     type:
@@ -22,11 +28,9 @@ interface WorkerMessage {
     payload: any;
 }
 
-let mdx: MDX;
-const mddInstances: MDD[] = [];
+// 将单个实例变量改为实例数组，用于管理所有加载的词典
+const dictionaries: DictionaryInstance[] = [];
 
-// --- 新增 ---
-// 将 getMimeType 函数也移到 Worker 中，让 Worker 负责所有资源处理逻辑
 function getMimeType(key: string): string {
     const ext = path.extname(key).toLowerCase();
     switch (ext) {
@@ -50,8 +54,9 @@ function getMimeType(key: string): string {
     }
 }
 
-function loadMddFiles(mdxPath: string): void {
-    console.log("[Worker] Searching for associated MDD files...");
+// 这个函数现在接收一个MDX路径，并为其加载所有关联的MDD文件
+function loadMddFiles(mdxPath: string): MDD[] {
+    const loadedMdds: MDD[] = [];
     const dir = path.dirname(mdxPath);
     const baseName = path.basename(mdxPath, path.extname(mdxPath));
     try {
@@ -63,8 +68,10 @@ function loadMddFiles(mdxPath: string): void {
             ) {
                 const mddPath = path.join(dir, file);
                 try {
-                    console.log(`[Worker] Loading MDD file: ${mddPath}`);
-                    mddInstances.push(new MDD(mddPath));
+                    console.log(
+                        `[Worker] Loading MDD file for ${baseName}: ${mddPath}`,
+                    );
+                    loadedMdds.push(new MDD(mddPath));
                 } catch (e) {
                     console.error(
                         `[Worker] Failed to load MDD file ${mddPath}:`,
@@ -73,21 +80,46 @@ function loadMddFiles(mdxPath: string): void {
                 }
             }
         });
-        console.log(`[Worker] Loaded ${mddInstances.length} MDD instance(s).`);
     } catch (e) {
-        console.error(`[Worker] Failed to read dictionary directory:`, e);
+        console.error(
+            `[Worker] Failed to read dictionary directory for MDDs:`,
+            e,
+        );
     }
+    return loadedMdds;
 }
 
-// --- 修改 ---
-// 使 on-message 处理器变为 async 以便使用 await
 parentPort?.on("message", async (message: WorkerMessage) => {
     const { id, type, payload } = message;
+    const mdxPaths: string[] = payload.mdxPaths;
     try {
         switch (type) {
             case "init":
-                mdx = new MDX(payload.mdxPath);
-                loadMddFiles(payload.mdxPath);
+                // 清空旧词典，为重载做准备
+                dictionaries.length = 0;
+
+                for (const mdxPath of mdxPaths) {
+                    try {
+                        console.log(
+                            `[Worker] Initializing dictionary: ${mdxPath}`,
+                        );
+                        const mdx = new MDX(mdxPath);
+                        const mdds = loadMddFiles(mdxPath);
+                        dictionaries.push({
+                            name: path.basename(mdxPath),
+                            mdx,
+                            mdds,
+                        });
+                    } catch (e) {
+                        console.error(
+                            `[Worker] Failed to load dictionary ${mdxPath}:`,
+                            e,
+                        );
+                    }
+                }
+                console.log(
+                    `[Worker] Successfully loaded ${dictionaries.length} of ${mdxPaths.length} dictionaries.`,
+                );
                 parentPort?.postMessage({
                     id,
                     type: "init-result",
@@ -95,26 +127,60 @@ parentPort?.on("message", async (message: WorkerMessage) => {
                 });
                 break;
 
-            // ... 其他 case 保持不变 ...
-            case "lookup":
+            case "lookup": {
+                const results: {
+                    dictionaryName: string;
+                    definition: string;
+                }[] = [];
+                for (const dict of dictionaries) {
+                    const result = dict.mdx.lookup(payload.word);
+                    if (result?.definition) {
+                        results.push({
+                            dictionaryName: dict.name,
+                            definition: result.definition,
+                        });
+                    }
+                }
                 parentPort?.postMessage({
                     id,
                     type: "lookup-result",
-                    payload: mdx.lookup(payload.word),
+                    payload: results,
                 });
                 break;
+            }
 
-            // --- 核心修改在此 ---
             case "getResource": {
+                const { key, dictionaryName } = payload;
+                if (!key || !dictionaryName) {
+                    throw new Error(
+                        "getResource requires both 'key' and 'dictionaryName'.",
+                    );
+                }
+
+                const targetDict = dictionaries.find(
+                    (d) => d.name === dictionaryName,
+                );
+
+                if (!targetDict) {
+                    console.warn(
+                        `[Worker] Resource request failed: Dictionary '${dictionaryName}' not found.`,
+                    );
+                    parentPort?.postMessage({
+                        id,
+                        type: "resource-result",
+                        payload: null,
+                    });
+                    break;
+                }
+
                 let resource: MdictLookupResult | null = null;
                 const resourceKey =
                     "\\" +
-                    payload.key
+                    key
                         .replace(/^(entry:\/\/|sound:\/\/)/, "")
                         .replace(/\//g, "\\");
 
-                // 1. 在所有 mdd 实例中查找资源
-                for (const mdd of mddInstances) {
+                for (const mdd of targetDict.mdds) {
                     const found = mdd.locate(resourceKey);
                     if (found?.definition) {
                         resource = found as MdictLookupResult;
@@ -122,14 +188,10 @@ parentPort?.on("message", async (message: WorkerMessage) => {
                     }
                 }
 
-                // 2. 如果找到了资源，进行处理
                 if (resource) {
                     const isSpx =
                         path.extname(resource.keyText).toLowerCase() === ".spx";
-
-                    // 3. 如果是 SPX 文件，就在 Worker 线程中进行转换
                     if (isSpx) {
-                        // --- 优化点：为转换操作添加独立的 try...catch ---
                         try {
                             console.log(
                                 `[Worker] Converting SPX resource: ${resource.keyText}`,
@@ -138,12 +200,8 @@ parentPort?.on("message", async (message: WorkerMessage) => {
                                 resource.definition,
                                 "base64",
                             );
-
-                            // 即使这里打印了警告，只要它不抛出异常，代码就会继续执行
                             const wavOutputBuffer =
                                 await convertSpxToWav(spxInputBuffer);
-
-                            // 转换成功（即使有警告）
                             parentPort?.postMessage({
                                 id,
                                 type: "resource-result",
@@ -153,12 +211,10 @@ parentPort?.on("message", async (message: WorkerMessage) => {
                                 },
                             });
                         } catch (conversionError) {
-                            // 如果转换过程真的抛出了一个致命错误（而不仅仅是警告）
                             console.error(
                                 `[Worker] FATAL: SPX to WAV conversion failed for ${resource.keyText}.`,
                                 conversionError,
                             );
-                            // 向主进程发送一个清晰的失败信号
                             parentPort?.postMessage({
                                 id,
                                 type: "resource-result",
@@ -166,7 +222,6 @@ parentPort?.on("message", async (message: WorkerMessage) => {
                             });
                         }
                     } else {
-                        // 4. 如果不是 SPX，直接返回原始数据和对应的 MIME 类型
                         parentPort?.postMessage({
                             id,
                             type: "resource-result",
@@ -177,7 +232,9 @@ parentPort?.on("message", async (message: WorkerMessage) => {
                         });
                     }
                 } else {
-                    // 5. 如果未找到资源，发送空结果
+                    console.warn(
+                        `[Worker] Resource '${key}' not found in dictionary '${dictionaryName}'.`,
+                    );
                     parentPort?.postMessage({
                         id,
                         type: "resource-result",
@@ -187,41 +244,74 @@ parentPort?.on("message", async (message: WorkerMessage) => {
                 break;
             }
 
-            // ... 其他 case 保持不变 ...
             case "prefix": {
-                const results: KeyWordItem[] = mdx.prefix(payload.prefix);
+                const combined = new Set<string>();
+                for (const dict of dictionaries) {
+                    const results = dict.mdx.prefix(payload.prefix);
+                    results.forEach((item) => combined.add(item.keyText));
+                }
                 parentPort?.postMessage({
                     id,
                     type: "prefix-result",
-                    payload: results.map((item) => item.keyText),
+                    payload: Array.from(combined).sort(),
                 });
                 break;
             }
-            case "associate":
+
+            case "associate": {
+                const allItems: KeyWordItem[] = [];
+                for (const dict of dictionaries) {
+                    allItems.push(...dict.mdx.associate(payload.phrase));
+                }
+                // 在这里可以添加基于 keyText 的去重逻辑，如果需要的话
                 parentPort?.postMessage({
                     id,
                     type: "associate-result",
-                    payload: mdx.associate(payload.phrase),
+                    payload: allItems,
                 });
                 break;
-            case "suggest":
+            }
+
+            case "suggest": {
+                const allItems = new Map<string, KeyWordItem>();
+                for (const dict of dictionaries) {
+                    const results = dict.mdx.suggest(
+                        payload.phrase,
+                        payload.distance || 2,
+                    );
+                    results.forEach((item) => {
+                        if (!allItems.has(item.keyText)) {
+                            allItems.set(item.keyText, item);
+                        }
+                    });
+                }
                 parentPort?.postMessage({
-                    id,
+                    id: id,
                     type: "suggest-result",
-                    payload: mdx.suggest(payload.phrase, payload.distance || 2),
+                    payload: Array.from(allItems.values()),
                 });
                 break;
-            case "fuzzy_search":
+            }
+
+            case "fuzzy_search": {
+                const allItems: FuzzyWord[] = [];
+                for (const dict of dictionaries) {
+                    allItems.push(
+                        ...dict.mdx.fuzzy_search(
+                            payload.word,
+                            payload.fuzzy_size || 10,
+                            payload.ed_gap || 2,
+                        ),
+                    );
+                }
+                // 可以根据需要对结果进行排序或去重
                 parentPort?.postMessage({
                     id,
                     type: "fuzzy_search-result",
-                    payload: mdx.fuzzy_search(
-                        payload.word,
-                        payload.fuzzy_size || 10,
-                        payload.ed_gap || 2,
-                    ),
+                    payload: allItems,
                 });
                 break;
+            }
         }
     } catch (error) {
         parentPort?.postMessage({

@@ -1,0 +1,39 @@
+/* src/components/Header.module.css */
+
+.header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 15px;
+    border-bottom: 1px solid #333;
+    flex-shrink: 0; /* Prevent header from shrinking */
+    background-color: #252526;
+}
+
+.title {
+    font-size: 1.2rem;
+    font-weight: 600;
+    margin: 0;
+    color: #ccc;
+}
+
+.settingsButton {
+    background-color: transparent;
+    border: none;
+    color: #d4d4d4;
+    border-radius: 4px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 5px;
+    transition: background-color 0.2s;
+}
+
+.settingsButton:hover {
+    background-color: #3c3c3c;
+}
+
+.settingsButton:focus {
+    outline: 1px solid #007acc;
+}

@@ -13,7 +13,7 @@
     "include": [
         "src/**/*.ts",
         "src/**/*.tsx",
-        "src/types.d.ts",
+        "./typings/*.d.ts",
         "../../dist-types/src/preload/index.d.ts"
     ]
 }

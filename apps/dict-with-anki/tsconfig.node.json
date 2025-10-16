@@ -8,6 +8,7 @@
         "src/main/*.ts",
         "src/main/**/*.ts",
         "src/preload/**/*.ts",
-        "src/preload/*.ts"
+        "src/preload/*.ts",
+        "typings/*.d.ts"
     ]
 }
