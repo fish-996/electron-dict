@@ -1,15 +1,41 @@
 import { parentPort } from "worker_threads";
 import { MDX, MDD, KeyWordItem, FuzzyWord } from "js-mdict";
 import * as path from "path";
-import * as fs from "fs";
+import * as fs from "fs/promises";
 import { convertSpxToWav } from "@dict/speex-wasm-decoder";
 
-// 定义一个结构来包装每个词典实例及其关联的MDD文件
-interface DictionaryInstance {
-    name: string; // 词典文件名，用作唯一标识符
+// 描述一个被发现的资源文件
+export interface DictionaryResource {
+    path: string; // 文件的绝对路径
+    name: string; // 文件名
+    type: "mdd" | "css" | "js";
+}
+
+// 描述一个词典组，以一个 .mdx 文件为核心
+export interface DictionaryGroup {
+    id: string; // 基于 mdx 路径的唯一 ID
+    name: string; // 词典的基本名称，用于分组
+    mdxPath: string; // .mdx 文件的路径
+    resources: DictionaryResource[]; // 发现的所有关联资源
+}
+
+// 主进程发送给 worker 以加载特定词典的配置
+export interface DictionaryLoadConfig {
+    id: string; // 对应 DictionaryGroup 的 id
+    mdxPath: string;
+    enabledMddPaths: string[];
+}
+
+// 包装已加载的词典实例
+interface LoadedDictionaryInstance {
+    id: string; // 对应 DictionaryGroup 的 id
+    name: string; // 词典文件名，用于日志和查找
     mdx: MDX;
     mdds: MDD[];
 }
+
+// 存储已加载到内存的词典实例
+const loadedDictionaries: LoadedDictionaryInstance[] = [];
 
 // 结果类型定义
 type MdictLookupResult = { keyText: string; definition: string };
@@ -24,12 +50,63 @@ interface WorkerMessage {
         | "prefix"
         | "associate"
         | "suggest"
-        | "fuzzy_search";
+        | "fuzzy_search"
+        | "load"
+        | "getAssets";
     payload: any;
 }
 
-// 将单个实例变量改为实例数组，用于管理所有加载的词典
-const dictionaries: DictionaryInstance[] = [];
+/**
+ * 查找与 mdx 文件关联的所有资源 (.mdd, .css, .js)
+ */
+async function findAssociatedFiles(mdxPath: string): Promise<DictionaryGroup> {
+    const dir = path.dirname(mdxPath);
+    const baseName = path.basename(mdxPath, path.extname(mdxPath));
+    const resources: DictionaryResource[] = [];
+
+    try {
+        const files = await fs.readdir(dir);
+        for (const file of files) {
+            const fileExt = path.extname(file).toLowerCase();
+            const fileBaseName = path.basename(file, fileExt);
+
+            // 匹配同名或 "主文件名.xxx" 形式的文件
+            if (fileBaseName.startsWith(baseName)) {
+                if (fileExt === ".mdd") {
+                    resources.push({
+                        path: path.join(dir, file),
+                        name: file,
+                        type: "mdd",
+                    });
+                } else if (fileExt === ".css") {
+                    resources.push({
+                        path: path.join(dir, file),
+                        name: file,
+                        type: "css",
+                    });
+                } else if (fileExt === ".js") {
+                    resources.push({
+                        path: path.join(dir, file),
+                        name: file,
+                        type: "js",
+                    });
+                }
+            }
+        }
+    } catch (e) {
+        console.error(
+            `[Worker] Failed to read directory ${dir} for associated files:`,
+            e,
+        );
+    }
+
+    return {
+        id: encodeURIComponent(mdxPath), // 使用 mdxPath 作为唯一标识符
+        name: baseName,
+        mdxPath: mdxPath,
+        resources: resources,
+    };
+}
 
 function getMimeType(key: string): string {
     const ext = path.extname(key).toLowerCase();
@@ -54,88 +131,134 @@ function getMimeType(key: string): string {
     }
 }
 
-// 这个函数现在接收一个MDX路径，并为其加载所有关联的MDD文件
-function loadMddFiles(mdxPath: string): MDD[] {
-    const loadedMdds: MDD[] = [];
-    const dir = path.dirname(mdxPath);
-    const baseName = path.basename(mdxPath, path.extname(mdxPath));
-    try {
-        const files = fs.readdirSync(dir);
-        files.forEach((file) => {
-            if (
-                file.startsWith(baseName) &&
-                file.toLowerCase().endsWith(".mdd")
-            ) {
-                const mddPath = path.join(dir, file);
-                try {
-                    console.log(
-                        `[Worker] Loading MDD file for ${baseName}: ${mddPath}`,
-                    );
-                    loadedMdds.push(new MDD(mddPath));
-                } catch (e) {
-                    console.error(
-                        `[Worker] Failed to load MDD file ${mddPath}:`,
-                        e,
-                    );
-                }
-            }
-        });
-    } catch (e) {
-        console.error(
-            `[Worker] Failed to read dictionary directory for MDDs:`,
-            e,
-        );
-    }
-    return loadedMdds;
-}
-
 parentPort?.on("message", async (message: WorkerMessage) => {
     const { id, type, payload } = message;
-    const mdxPaths: string[] = payload.mdxPaths;
     try {
         switch (type) {
-            case "init":
-                // 清空旧词典，为重载做准备
-                dictionaries.length = 0;
+            // 步骤1: 发现所有词典及其资源
+            case "init": {
+                const scanPaths: string[] = payload.scanPaths;
+                const dictionaryGroups: DictionaryGroup[] = [];
 
-                for (const mdxPath of mdxPaths) {
+                for (const dirPath of scanPaths) {
+                    try {
+                        const files = await fs.readdir(dirPath);
+                        for (const file of files) {
+                            if (file.toLowerCase().endsWith(".mdx")) {
+                                const mdxPath = path.join(dirPath, file);
+                                const group =
+                                    await findAssociatedFiles(mdxPath);
+                                dictionaryGroups.push(group);
+                            }
+                        }
+                    } catch (e) {
+                        console.error(
+                            `[Worker] Failed to scan directory ${dirPath}:`,
+                            e,
+                        );
+                    }
+                }
+
+                parentPort?.postMessage({
+                    id,
+                    type: "init-result",
+                    payload: { dictionaryGroups },
+                });
+                break;
+            }
+
+            // 步骤3a: 根据用户配置加载词典实例
+            case "load": {
+                const configs: DictionaryLoadConfig[] = payload.configs;
+                loadedDictionaries.length = 0; // 清空旧实例
+
+                for (const config of configs) {
                     try {
                         console.log(
-                            `[Worker] Initializing dictionary: ${mdxPath}`,
+                            `[Worker] Loading dictionary: ${config.mdxPath}`,
                         );
-                        const mdx = new MDX(mdxPath);
-                        const mdds = loadMddFiles(mdxPath);
-                        dictionaries.push({
-                            name: path.basename(mdxPath),
+                        const mdx = new MDX(config.mdxPath);
+                        const mdds: MDD[] = [];
+
+                        for (const mddPath of config.enabledMddPaths) {
+                            try {
+                                console.log(
+                                    `[Worker] Loading enabled MDD: ${mddPath}`,
+                                );
+                                mdds.push(new MDD(mddPath));
+                            } catch (e) {
+                                console.error(
+                                    `[Worker] Failed to load MDD file ${mddPath}:`,
+                                    e,
+                                );
+                            }
+                        }
+
+                        loadedDictionaries.push({
+                            id: config.id,
+                            name: path.basename(config.mdxPath),
                             mdx,
                             mdds,
                         });
                     } catch (e) {
                         console.error(
-                            `[Worker] Failed to load dictionary ${mdxPath}:`,
+                            `[Worker] Failed to load dictionary from config ${config.id}:`,
                             e,
                         );
                     }
                 }
+
                 console.log(
-                    `[Worker] Successfully loaded ${dictionaries.length} of ${mdxPaths.length} dictionaries.`,
+                    `[Worker] Successfully loaded ${loadedDictionaries.length} dictionaries into memory.`,
                 );
                 parentPort?.postMessage({
                     id,
-                    type: "init-result",
+                    type: "load-result",
                     payload: { success: true },
                 });
                 break;
+            }
+
+            // 步骤3b: 获取启用的 CSS/JS 文件内容
+            case "getAssets": {
+                const assetPaths: string[] = payload.assetPaths;
+                const assetsContent: Record<string, string> = {};
+
+                const readPromises = assetPaths.map(async (assetPath) => {
+                    try {
+                        const content = await fs.readFile(assetPath, "utf-8");
+                        assetsContent[assetPath] = content;
+                    } catch (e) {
+                        console.error(
+                            `[Worker] Failed to read asset file ${assetPath}:`,
+                            e,
+                        );
+                        assetsContent[assetPath] =
+                            `/* Error reading file: ${path.basename(assetPath)} */`;
+                    }
+                });
+
+                await Promise.all(readPromises);
+
+                parentPort?.postMessage({
+                    id,
+                    type: "assets-result",
+                    payload: { assetsContent },
+                });
+                break;
+            }
 
             case "lookup": {
                 const results: {
+                    dictionaryId: string; // 返回 ID 而不是 name，更精确
                     dictionaryName: string;
                     definition: string;
                 }[] = [];
-                for (const dict of dictionaries) {
+                for (const dict of loadedDictionaries) {
                     const result = dict.mdx.lookup(payload.word);
                     if (result?.definition) {
                         results.push({
+                            dictionaryId: dict.id,
                             dictionaryName: dict.name,
                             definition: result.definition,
                         });
@@ -150,20 +273,22 @@ parentPort?.on("message", async (message: WorkerMessage) => {
             }
 
             case "getResource": {
-                const { key, dictionaryName } = payload;
-                if (!key || !dictionaryName) {
+                const { key, dictionaryId } = payload; // 使用 ID 来定位词典
+                if (!key || !dictionaryId) {
                     throw new Error(
-                        "getResource requires both 'key' and 'dictionaryName'.",
+                        "getResource requires both 'key' and 'dictionaryId'.",
                     );
                 }
+                console.log(payload);
+                console.log(loadedDictionaries.map((c) => c.id));
 
-                const targetDict = dictionaries.find(
-                    (d) => d.name === dictionaryName,
+                const targetDict = loadedDictionaries.find(
+                    (d) => d.id === dictionaryId,
                 );
 
                 if (!targetDict) {
                     console.warn(
-                        `[Worker] Resource request failed: Dictionary '${dictionaryName}' not found.`,
+                        `[Worker] Resource request failed: Dictionary '${dictionaryId}' not found.`,
                     );
                     parentPort?.postMessage({
                         id,
@@ -233,7 +358,7 @@ parentPort?.on("message", async (message: WorkerMessage) => {
                     }
                 } else {
                     console.warn(
-                        `[Worker] Resource '${key}' not found in dictionary '${dictionaryName}'.`,
+                        `[Worker] Resource '${key}' not found in dictionary '${dictionaryId}'.`,
                     );
                     parentPort?.postMessage({
                         id,
@@ -246,8 +371,11 @@ parentPort?.on("message", async (message: WorkerMessage) => {
 
             case "prefix": {
                 const combined = new Set<string>();
-                for (const dict of dictionaries) {
-                    const results = dict.mdx.prefix(payload.prefix);
+                const maxResults = payload.maxResults || 10;
+                for (const dict of loadedDictionaries) {
+                    const results = dict.mdx
+                        .prefix(payload.prefix)
+                        .slice(0, maxResults);
                     results.forEach((item) => combined.add(item.keyText));
                 }
                 parentPort?.postMessage({
@@ -260,8 +388,13 @@ parentPort?.on("message", async (message: WorkerMessage) => {
 
             case "associate": {
                 const allItems: KeyWordItem[] = [];
-                for (const dict of dictionaries) {
-                    allItems.push(...dict.mdx.associate(payload.phrase));
+                const maxResults = payload.maxResults || 10;
+                for (const dict of loadedDictionaries) {
+                    allItems.push(
+                        ...dict.mdx
+                            .associate(payload.phrase)
+                            .slice(0, maxResults),
+                    );
                 }
                 // 在这里可以添加基于 keyText 的去重逻辑，如果需要的话
                 parentPort?.postMessage({
@@ -274,7 +407,8 @@ parentPort?.on("message", async (message: WorkerMessage) => {
 
             case "suggest": {
                 const allItems = new Map<string, KeyWordItem>();
-                for (const dict of dictionaries) {
+                const maxResults = payload.maxResults || 10;
+                for (const dict of loadedDictionaries) {
                     const results = dict.mdx.suggest(
                         payload.phrase,
                         payload.distance || 2,
@@ -288,14 +422,14 @@ parentPort?.on("message", async (message: WorkerMessage) => {
                 parentPort?.postMessage({
                     id: id,
                     type: "suggest-result",
-                    payload: Array.from(allItems.values()),
+                    payload: Array.from(allItems.values()).slice(0, maxResults),
                 });
                 break;
             }
 
             case "fuzzy_search": {
                 const allItems: FuzzyWord[] = [];
-                for (const dict of dictionaries) {
+                for (const dict of loadedDictionaries) {
                     allItems.push(
                         ...dict.mdx.fuzzy_search(
                             payload.word,

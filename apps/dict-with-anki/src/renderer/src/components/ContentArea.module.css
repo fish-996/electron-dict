@@ -36,12 +36,22 @@
     font-size: 1.4em;
     font-weight: 600;
     color: #4fc3f7; /* A lighter blue */
-    margin-top: 25px;
     margin-bottom: 15px;
     padding-bottom: 10px;
     border-bottom: 1px solid #333;
+    margin-top: 0;
 }
 
 .firstTitle {
     margin-top: 0;
+}
+
+.dictionaryBox {
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    margin-bottom: 1.5rem;
+    padding: 1rem;
+    background-color: #fff;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+    overflow: hidden; /* 确保 iframe 不会溢出圆角 */
 }

@@ -2,25 +2,30 @@
 import React, { useState, useEffect, useCallback } from "react";
 import styles from "./App.module.css";
 
+import { useAppContext } from "./AppContext"; // 使用我们的新 Context
 import Header from "./components/Header";
 import Sidebar from "./components/Sidebar";
 import ContentArea from "./components/ContentArea";
 import SettingsModal from "./components/SettingsModal";
 import type { KeyWordItem } from "js-mdict";
 
-// Types can be moved to a separate `types.ts` file
+// 类型定义可以移到共享的 types.ts 文件
 export interface RenderedDefinitionBlock {
-    id: string;
+    id: string; // 现在是 dictionaryId
     dictionaryName: string;
+    dictionaryId: string; // 保留 ID 以便查找资源
     htmlContent: string | null;
     isLoading: boolean;
 }
 
-// A single, persistent audio player instance
+// 单一、持久的音频播放器实例
 const audioPlayer = new Audio();
 
 const App: React.FC = () => {
-    // --- Shared/Global State ---
+    // --- 从 Context 获取全局状态 ---
+    const { userScripts } = useAppContext();
+
+    // --- 本地状态 ---
     const [wordToLookup, setWordToLookup] = useState("");
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
     const [definitionBlocks, setDefinitionBlocks] = useState<
@@ -30,159 +35,104 @@ const App: React.FC = () => {
     const [isGlobalLoading, setIsGlobalLoading] = useState(false);
     const [_isAudioPlaying, setIsAudioPlaying] = useState(false);
 
-    // --- Core Data Fetching Logic (Remains in App) ---
-    const processRawHtml = useCallback(
-        async (rawHtml: string, dictionaryName: string): Promise<string> => {
-            // This logic is unchanged, it's a pure utility for the lookup process
-            const container = document.createElement("div");
-            container.innerHTML = rawHtml;
-            const resourceElements = container.querySelectorAll<HTMLElement>(
-                'link[href$=".css"], img[src]',
-            );
-            const promises = Array.from(resourceElements).map(
-                async (element) => {
-                    const isLink = element.tagName.toLowerCase() === "link";
-                    const originalKey = element.getAttribute(
-                        isLink ? "href" : "src",
-                    );
-                    if (!originalKey || originalKey.startsWith("data:")) return;
-                    const key = originalKey.split("/").pop() || originalKey;
-                    try {
-                        const resource = await window.electronAPI.getResource({
-                            key,
-                            dictionaryName,
-                        });
-                        if (resource) {
-                            const { data, mimeType } = resource;
-                            if (isLink) {
-                                const style = document.createElement("style");
-                                style.textContent = atob(data);
-                                element.parentNode?.replaceChild(
-                                    style,
-                                    element,
-                                );
-                            } else {
-                                (element as HTMLImageElement).src =
-                                    `data:${mimeType};base64,${data}`;
-                            }
-                        }
-                    } catch (error) {
-                        console.error(
-                            `Failed to load resource: ${key} from ${dictionaryName}`,
-                            error,
-                        );
-                    }
-                },
-            );
-            await Promise.all(promises);
-            return container.innerHTML;
-        },
-        [],
-    );
+    // --- 核心数据获取逻辑 ---
+    // `processRawHtml` 函数已不再需要，因为资源处理现在由沙箱化的 iframe 和预加载的 CSS/JS 完成。
 
-    const lookupWord = useCallback(
-        async (word: string) => {
-            if (!word) return;
-            setIsGlobalLoading(true);
-            setDefinitionBlocks([]);
-            setAssociatedWords([]);
+    const lookupWord = useCallback(async (word: string) => {
+        if (!word) return;
+        setIsGlobalLoading(true);
+        setDefinitionBlocks([]);
+        setAssociatedWords([]);
 
-            try {
-                const rawResults = await window.electronAPI.lookup(word);
+        try {
+            const rawResults = await window.electronAPI.lookup(word);
 
-                if (rawResults.length === 0) {
-                    setDefinitionBlocks([
-                        {
-                            id: "not-found",
-                            dictionaryName: "System",
-                            htmlContent: `<h2>'${word}' not found.</h2>`,
-                            isLoading: false,
-                        },
-                    ]);
-                    setIsGlobalLoading(false);
-                    return;
-                }
-
-                const initialBlocks = rawResults.map((result) => ({
-                    id: result.dictionaryName,
-                    dictionaryName: result.dictionaryName,
-                    htmlContent: null,
-                    isLoading: true,
-                }));
-                setDefinitionBlocks(initialBlocks);
-                setIsGlobalLoading(false);
-
-                // Fetch associated words
-                window.electronAPI
-                    .getAssociatedWords(word)
-                    .then(setAssociatedWords)
-                    .catch((err) =>
-                        console.error("Failed to get associated words:", err),
-                    );
-
-                // Process HTML for each definition
-                rawResults.forEach(async (rawResult) => {
-                    const processedHtml = await processRawHtml(
-                        rawResult.definition,
-                        rawResult.dictionaryName,
-                    );
-                    setDefinitionBlocks((prevBlocks) =>
-                        prevBlocks.map((block) =>
-                            block.id === rawResult.dictionaryName
-                                ? {
-                                      ...block,
-                                      htmlContent: processedHtml,
-                                      isLoading: false,
-                                  }
-                                : block,
-                        ),
-                    );
-                });
-            } catch (error) {
-                console.error(`Error looking up ${word}:`, error);
+            if (rawResults.length === 0) {
                 setDefinitionBlocks([
                     {
-                        id: "error",
-                        dictionaryName: "Error",
-                        htmlContent: `<h2>An error occurred.</h2><p>${(error as Error).message}</p>`,
+                        id: "not-found",
+                        dictionaryName: "System",
+                        dictionaryId: "system-not-found",
+                        htmlContent: `<h2>'${word}' not found.</h2>`,
                         isLoading: false,
                     },
                 ]);
                 setIsGlobalLoading(false);
+                return;
             }
-        },
-        [processRawHtml],
-    );
+
+            // 使用 dictionaryId 作为唯一的 key
+            const initialBlocks = rawResults.map((result) => ({
+                id: result.dictionaryId,
+                dictionaryName: result.dictionaryName,
+                dictionaryId: result.dictionaryId,
+                htmlContent: result.definition, // 直接使用原始 HTML
+                isLoading: false, // HTML 已包含，不再需要单独加载
+            }));
+            setDefinitionBlocks(initialBlocks);
+            setIsGlobalLoading(false);
+
+            // 异步获取关联词
+            window.electronAPI
+                .getAssociatedWords(word)
+                .then(setAssociatedWords)
+                .catch((err) =>
+                    console.error("Failed to get associated words:", err),
+                );
+        } catch (error) {
+            console.error(`Error looking up ${word}:`, error);
+            setDefinitionBlocks([
+                {
+                    id: "error",
+                    dictionaryName: "Error",
+                    dictionaryId: "system-error",
+                    htmlContent: `<h2>An error occurred.</h2><p>${(error as Error).message}</p>`,
+                    isLoading: false,
+                },
+            ]);
+            setIsGlobalLoading(false);
+        }
+    }, []);
 
     // Effect to trigger the main lookup when wordToLookup changes
     useEffect(() => {
-        if (wordToLookup) {
-            lookupWord(wordToLookup);
-        }
+        // 防抖动可以进一步优化，但现在保持简单
+        const handler = setTimeout(() => {
+            if (wordToLookup) {
+                lookupWord(wordToLookup);
+            }
+        }, 100); // 轻微延迟以避免快速输入时的频繁请求
+
+        return () => clearTimeout(handler);
     }, [wordToLookup, lookupWord]);
 
-    // --- Global Audio Player Management ---
-    const handlePlaySound = async (key: string, dictionaryName: string) => {
-        setIsAudioPlaying(true);
-        try {
-            const resource = await window.electronAPI.getResource({
-                key,
-                dictionaryName,
-            });
-            if (resource) {
-                audioPlayer.src = `data:${resource.mimeType};base64,${resource.data}`;
-                await audioPlayer.play();
-            } else {
-                console.warn(
-                    `Audio resource not found: ${key} in ${dictionaryName}`,
-                );
+    // --- 全局音频播放器管理 ---
+    const handlePlaySound = useCallback(
+        async (key: string, dictionaryId: string) => {
+            setIsAudioPlaying(true);
+            try {
+                console.log(dictionaryId);
+                // 使用 dictionaryId 来获取资源
+                const resource = await window.electronAPI.getResource({
+                    key,
+                    dictionaryId,
+                });
+                if (resource) {
+                    audioPlayer.src = `data:${resource.mimeType};base64,${resource.data}`;
+                    await audioPlayer.play();
+                } else {
+                    console.warn(
+                        `Audio resource not found: ${key} in ${dictionaryId}`,
+                    );
+                    setIsAudioPlaying(false);
+                }
+            } catch (error) {
+                console.error(`Error playing audio ${key}:`, error);
                 setIsAudioPlaying(false);
             }
-        } catch (error) {
-            console.error(`Error playing audio ${key}:`, error);
-            setIsAudioPlaying(false);
-        }
-    };
+        },
+        [],
+    );
 
     useEffect(() => {
         const onEnded = () => setIsAudioPlaying(false);
@@ -202,15 +152,16 @@ const App: React.FC = () => {
             <div className={styles.mainLayout}>
                 <Sidebar
                     associatedWords={associatedWords}
-                    onWordSelect={setWordToLookup} // Pass the setter function directly
+                    onWordSelect={setWordToLookup}
                     initialWord={wordToLookup}
                 />
                 <ContentArea
                     wordToLookup={wordToLookup}
                     definitionBlocks={definitionBlocks}
                     isLoading={isGlobalLoading}
-                    onEntryLinkClick={setWordToLookup} // Re-use the same setter
+                    onEntryLinkClick={setWordToLookup}
                     onSoundLinkClick={handlePlaySound}
+                    userScripts={userScripts} // 将获取到的脚本传递下去
                 />
             </div>
         </div>

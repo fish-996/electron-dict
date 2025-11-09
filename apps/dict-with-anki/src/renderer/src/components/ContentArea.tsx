@@ -1,47 +1,17 @@
 // src/components/ContentArea.tsx
-import React, { useCallback } from "react";
-import type { RenderedDefinitionBlock as BlockData } from "../App";
+import React from "react";
+import type { RenderedDefinitionBlock } from "../App";
 import styles from "./ContentArea.module.css";
-
-interface DefinitionBlockProps {
-    block: BlockData;
-    isFirst: boolean;
-}
-
-// A smaller, focused component for rendering one definition
-const DefinitionBlock: React.FC<DefinitionBlockProps> = ({
-    block,
-    isFirst,
-}) => {
-    const isSystemMessage =
-        block.dictionaryName === "System" || block.dictionaryName === "Error";
-    return (
-        <div data-dictionary-name={block.dictionaryName}>
-            {!isSystemMessage && (
-                <h3
-                    className={`${styles.definitionTitle} ${isFirst ? styles.firstTitle : ""}`}
-                >
-                    {block.dictionaryName}
-                </h3>
-            )}
-            {block.isLoading && (
-                <div className={styles.loader}>
-                    <span>Loading definition...</span>
-                </div>
-            )}
-            {block.htmlContent && (
-                <div dangerouslySetInnerHTML={{ __html: block.htmlContent }} />
-            )}
-        </div>
-    );
-};
-
+// 导入新的沙箱化组件
+import SandboxedDefinitionBlock from "./SandboxedDefinitionBlock";
+import { useAppContext } from "@renderer/AppContext";
 interface ContentAreaProps {
     wordToLookup: string;
-    definitionBlocks: BlockData[];
+    definitionBlocks: RenderedDefinitionBlock[];
     isLoading: boolean;
-    onSoundLinkClick: (key: string, dictionaryName: string) => void;
+    onSoundLinkClick: (key: string, dictionaryId: string) => void; // 参数变为 dictionaryId
     onEntryLinkClick: (word: string) => void;
+    userScripts: Record<string, string>; // 接收 userScripts
 }
 
 const ContentArea: React.FC<ContentAreaProps> = ({
@@ -50,38 +20,12 @@ const ContentArea: React.FC<ContentAreaProps> = ({
     isLoading,
     onSoundLinkClick,
     onEntryLinkClick,
+    userScripts,
 }) => {
-    // --- Logic Local to the ContentArea ---
-    const handleContentClick = useCallback(
-        (event: React.MouseEvent<HTMLDivElement>) => {
-            const target = event.target as HTMLElement;
-            const link = target.closest("a");
-            if (!link) return;
+    // --- handleContentClick 逻辑现在被移除了 ---
+    // 因为事件处理已经下放到 SandboxedDefinitionBlock 和其 iframe 内部了
 
-            const href = link.getAttribute("href");
-            if (!href) return;
-
-            event.preventDefault();
-
-            // Find the parent dictionary block to get its name
-            const blockElement = target.closest<HTMLElement>(
-                "[data-dictionary-name]",
-            );
-            const dictionaryName = blockElement?.dataset.dictionaryName;
-
-            if (href.startsWith("sound://") && dictionaryName) {
-                // Communicate UP to App that a sound should be played
-                onSoundLinkClick(href, dictionaryName);
-            } else if (href.startsWith("entry://")) {
-                const entryWord = href
-                    .replace("entry://", "")
-                    .replace(/\\/g, "/");
-                // Communicate UP to App that a new word should be looked up
-                onEntryLinkClick(entryWord);
-            }
-        },
-        [onSoundLinkClick, onEntryLinkClick],
-    );
+    const { config } = useAppContext();
 
     const renderContent = () => {
         if (isLoading) {
@@ -93,13 +37,48 @@ const ContentArea: React.FC<ContentAreaProps> = ({
         }
 
         if (definitionBlocks.length > 0) {
-            return definitionBlocks.map((block, index) => (
-                <DefinitionBlock
-                    key={block.id}
-                    block={block}
-                    isFirst={index === 0}
-                />
-            ));
+            return definitionBlocks.map((block, index) => {
+                // 如果是系统消息，则不应用自定义脚本
+                if (block.dictionaryId.startsWith("system-")) {
+                    // 假设你有一个非沙箱化的 DefinitionBlock 用于系统消息
+                    // return <SimpleDefinitionBlock key={block.id} block={block} isFirst={index === 0} />;
+                    // 或者在 SandboxedDefinitionBlock 中处理这种情况
+                }
+
+                // 找到当前词典的配置
+                const dictConfig = config?.configs[block.dictionaryId];
+                if (!dictConfig) return null; // 如果找不到配置，则不渲染
+
+                // 聚合所有启用的 CSS 和 JS
+                const enabledResources = dictConfig.enabledResources || {};
+                const customCss = Object.keys(enabledResources)
+                    .filter(
+                        (path) =>
+                            path.endsWith(".css") && enabledResources[path],
+                    )
+                    .map((path) => userScripts[path] || "")
+                    .join("\n");
+
+                const customJs = Object.keys(enabledResources)
+                    .filter(
+                        (path) =>
+                            path.endsWith(".js") && enabledResources[path],
+                    )
+                    .map((path) => userScripts[path] || "")
+                    .join("\n");
+
+                return (
+                    <SandboxedDefinitionBlock
+                        key={block.id}
+                        block={block}
+                        isFirst={index === 0}
+                        onSoundLinkClick={onSoundLinkClick}
+                        onEntryLinkClick={onEntryLinkClick}
+                        customCss={customCss}
+                        customJs={customJs}
+                    />
+                );
+            });
         }
 
         if (!wordToLookup) {
@@ -112,13 +91,12 @@ const ContentArea: React.FC<ContentAreaProps> = ({
             );
         }
 
-        return null; // The "not found" case is handled by a definition block now
+        return null; // "not found" 案例由 definition block 处理
     };
 
     return (
-        <main className={styles.content} onClick={handleContentClick}>
-            {renderContent()}
-        </main>
+        // onClick 事件处理器可以移除了
+        <main className={styles.content}>{renderContent()}</main>
     );
 };
 

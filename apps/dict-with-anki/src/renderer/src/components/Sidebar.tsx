@@ -66,8 +66,8 @@ const Sidebar: React.FC<SidebarProps> = ({
             try {
                 const [suggestions, spelling, fuzzy] = await Promise.all([
                     window.electronAPI.getSuggestions(query),
-                    window.electronAPI.getSpellingSuggestions(query),
-                    window.electronAPI.fuzzySearch(query),
+                    window.electronAPI.getSpellingSuggestions(query, 1),
+                    window.electronAPI.fuzzySearch(query, 4, 2),
                 ]);
                 setResults({ suggestions, spelling, fuzzy });
             } catch (error) {

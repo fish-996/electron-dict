@@ -1,26 +1,53 @@
-import { contextBridge, ipcRenderer } from "electron";
+import { contextBridge, ipcRenderer, IpcRendererEvent } from "electron";
 import type { KeyWordItem, FuzzyWord } from "js-mdict";
 
-// --- 新增/修改接口定义 ---
+// --- 定义暴露给渲染进程的完整 API ---
 
-// 从 dictionaryService.ts 引入的类型，这里为了独立性重新定义
 export interface LookupResult {
+    dictionaryId: string; // 使用 ID
     dictionaryName: string;
     definition: string;
 }
 
 export interface ResourceResult {
-    data: string;
+    data: string; // base64 encoded data
     mimeType: string;
 }
 
-// 定义暴露给渲染进程的完整 API
+export interface DictionaryResource {
+    path: string; // 文件的绝对路径
+    name: string; // 文件名
+    type: "mdd" | "css" | "js";
+}
+
+interface DictionaryResourceConfig {
+    [resourcePath: string]: boolean; // key: 资源文件路径, value: 是否启用
+}
+
+export interface DictionaryConfig {
+    enabled: boolean; // 整个词典组是否启用
+    enabledResources: DictionaryResourceConfig;
+}
+
+export interface DictionaryGroup {
+    id: string; // 基于 mdx 路径的唯一 ID
+    name: string; // 词典的基本名称，用于分组
+    mdxPath: string; // .mdx 文件的路径
+    resources: DictionaryResource[]; // 发现的所有关联资源
+}
+
+export interface FullConfig {
+    discoveredGroups: DictionaryGroup[];
+    configs: Record<string, DictionaryConfig>;
+    scanPaths: string[];
+}
+
 export interface ElectronAPI {
-    // --- 词典查询相关 API ---
+    // --- 运行时查询 API ---
     lookup: (word: string) => Promise<LookupResult[]>;
     getResource: (params: {
         key: string;
-        dictionaryName: string;
+        dictionaryId: string; // 参数从 dictionaryName 变为 dictionaryId
     }) => Promise<ResourceResult | null>;
     getSuggestions: (prefix: string) => Promise<string[]>;
     getAssociatedWords: (phrase: string) => Promise<KeyWordItem[]>;
@@ -34,18 +61,26 @@ export interface ElectronAPI {
         ed_gap?: number,
     ) => Promise<FuzzyWord[]>;
 
-    // --- 新增：设置相关 API ---
-    getDictionaryPaths: () => Promise<string[]>;
-    addDictionaries: () => Promise<string[]>;
-    removeDictionary: (pathToRemove: string) => Promise<string[]>;
+    // --- 用户脚本 API ---
+    getAllUserScripts: () => Promise<Record<string, string>>;
+
+    // --- 设置和配置管理 API ---
+    getFullConfig: () => Promise<FullConfig>;
+    addScanPath: () => Promise<string[]>;
+    removeScanPath: (pathToRemove: string) => Promise<string[]>;
+    updateConfig: (
+        updatedConfigs: Record<string, DictionaryConfig>,
+    ) => Promise<boolean>;
+
+    // --- 事件监听 API ---
+    onConfigUpdated: (callback: () => void) => () => void;
 }
 
 // --- 实现 API ---
 const api: ElectronAPI = {
-    // --- 词典查询 ---
+    // --- 运行时查询 ---
     lookup: (word) => ipcRenderer.invoke("dict:lookup", word),
 
-    // getResource 现在传递一个对象
     getResource: (params) => ipcRenderer.invoke("dict:getResource", params),
 
     getSuggestions: (prefix) =>
@@ -57,26 +92,40 @@ const api: ElectronAPI = {
     getSpellingSuggestions: (phrase, distance) =>
         ipcRenderer.invoke("dict:getSpellingSuggestions", phrase, distance),
 
-    fuzzySearch: (word, fuzzy_size, ed_gap) => {
-        // 注意：ipcRenderer.invoke 的第二个参数之后的所有参数都会被平铺传递。
-        // 但为了清晰和与 handle 匹配，最好将它们打包成一个对象。
-        // 在我们的 main.ts 中，handle 已经正确处理了这种情况。
-        return ipcRenderer.invoke("dict:fuzzySearch", word, fuzzy_size, ed_gap);
+    fuzzySearch: (word, fuzzy_size, ed_gap) =>
+        ipcRenderer.invoke("dict:fuzzySearch", word, fuzzy_size, ed_gap),
+
+    // --- 用户脚本 ---
+    getAllUserScripts: () => ipcRenderer.invoke("get-all-user-scripts"),
+
+    // --- 设置管理 ---
+    getFullConfig: () => ipcRenderer.invoke("settings:get-full-config"),
+
+    addScanPath: () => ipcRenderer.invoke("settings:add-scan-path"),
+
+    removeScanPath: (pathToRemove) =>
+        ipcRenderer.invoke("settings:remove-scan-path", pathToRemove),
+
+    updateConfig: (updatedConfigs) =>
+        ipcRenderer.invoke("settings:update-config", updatedConfigs),
+
+    // --- 事件监听 ---
+    onConfigUpdated: (callback: () => void) => {
+        const handler = (_event: IpcRendererEvent) => callback();
+        ipcRenderer.on("config-updated", handler);
+
+        // 返回一个清理函数，允许 React 组件在卸载时取消监听
+        return () => {
+            ipcRenderer.removeListener("config-updated", handler);
+        };
     },
-
-    // --- 新增：设置 ---
-    getDictionaryPaths: () =>
-        ipcRenderer.invoke("settings:get-dictionary-paths"),
-
-    addDictionaries: () => ipcRenderer.invoke("settings:add-dictionaries"),
-
-    removeDictionary: (pathToRemove) =>
-        ipcRenderer.invoke("settings:remove-dictionary", pathToRemove),
 };
 
-// --- 暴露 API ---
+// --- 安全地暴露 API 到渲染进程 ---
 try {
+    // 'electronAPI' 是我们在渲染进程中通过 window.electronAPI 访问的键
     contextBridge.exposeInMainWorld("electronAPI", api);
+    console.log("Electron API exposed to the main world.");
 } catch (error) {
     console.error("Failed to expose Electron API to the main world:", error);
 }
