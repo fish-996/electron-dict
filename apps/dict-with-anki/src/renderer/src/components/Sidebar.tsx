@@ -35,7 +35,7 @@ interface SearchResults {
 interface SidebarProps {
     associatedWords: KeyWordItem[];
     onWordSelect: (word: string) => void;
-    initialWord: string;
+    initialWord?: string;
 }
 
 const Sidebar: React.FC<SidebarProps> = ({
@@ -51,9 +51,8 @@ const Sidebar: React.FC<SidebarProps> = ({
         fuzzy: [],
     });
 
-    // Sync input value when an entry link is clicked in the content area
     useEffect(() => {
-        setInputValue(initialWord);
+        setInputValue(initialWord ?? "");
     }, [initialWord]);
 
     // --- Logic Local to the Sidebar ---

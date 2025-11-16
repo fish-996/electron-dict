@@ -1,13 +1,21 @@
 // src/App.tsx
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import styles from "./App.module.css";
 
-import { useAppContext } from "./AppContext"; // 使用我们的新 Context
+// 确保从正确的路径导入 AppContextProvider 和 useAppContext
+import { AppContextProvider, useAppContext } from "./AppContext"; // 假设 AppContext 在 contexts 文件夹下
 import Header from "./components/Header";
 import Sidebar from "./components/Sidebar";
 import ContentArea from "./components/ContentArea";
 import SettingsModal from "./components/SettingsModal";
 import type { KeyWordItem } from "js-mdict";
+
+// 新增：定义从 Dict 服务返回的原始结果类型
+export interface RawDefinitionResult {
+    dictionaryId: string;
+    dictionaryName: string;
+    definition: string | null;
+}
 
 // 类型定义可以移到共享的 types.ts 文件
 export interface RenderedDefinitionBlock {
@@ -16,129 +24,163 @@ export interface RenderedDefinitionBlock {
     dictionaryId: string; // 保留 ID 以便查找资源
     htmlContent: string | null;
     isLoading: boolean;
+    // 新增：可选的重定向信息，用于在 UI 中显示
+    redirectInfo?: string;
+    resolvedWord?: string; // 最终解析到的词
 }
 
-// 单一、持久的音频播放器实例
-const audioPlayer = new Audio();
-
-const App: React.FC = () => {
-    // --- 从 Context 获取全局状态 ---
-    const { userScripts } = useAppContext();
+// 将原有的 App 组件重命名为 AppContent
+const AppContent: React.FC = () => {
+    // 从 AppContext 中获取 userScripts 和 config
+    const { userScripts, config } = useAppContext();
 
     // --- 本地状态 ---
-    const [wordToLookup, setWordToLookup] = useState("");
+    const [wordToSearch, setWordToSearch] = useState(""); // 用户最初输入的词
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-    const [definitionBlocks, setDefinitionBlocks] = useState<
+
+    // 存储从 Electron IPC 获得的原始查询结果 (可能包含 @@@LINK=)
+    const [rawDefinitionResults, setRawDefinitionResults] = useState<
+        RawDefinitionResult[]
+    >([]);
+    // 存储所有 DictionaryEntryDisplay 处理后的最终结果
+    const [resolvedDefinitionBlocks, setResolvedDefinitionBlocks] = useState<
         RenderedDefinitionBlock[]
     >([]);
+
     const [associatedWords, setAssociatedWords] = useState<KeyWordItem[]>([]);
     const [isGlobalLoading, setIsGlobalLoading] = useState(false);
-    const [_isAudioPlaying, setIsAudioPlaying] = useState(false);
 
-    // --- 核心数据获取逻辑 ---
-    // `processRawHtml` 函数已不再需要，因为资源处理现在由沙箱化的 iframe 和预加载的 CSS/JS 完成。
+    // 用于跟踪每个字典块是否已完成解析
+    const pendingResolutions = useRef(new Set<string>());
 
-    const lookupWord = useCallback(async (word: string) => {
-        if (!word) return;
-        setIsGlobalLoading(true);
-        setDefinitionBlocks([]);
-        setAssociatedWords([]);
-
-        try {
-            const rawResults = await window.electronAPI.lookup(word);
-
-            if (rawResults.length === 0) {
-                setDefinitionBlocks([
-                    {
-                        id: "not-found",
-                        dictionaryName: "System",
-                        dictionaryId: "system-not-found",
-                        htmlContent: `<h2>'${word}' not found.</h2>`,
-                        isLoading: false,
-                    },
-                ]);
-                setIsGlobalLoading(false);
-                return;
-            }
-
-            // 使用 dictionaryId 作为唯一的 key
-            const initialBlocks = rawResults.map((result) => ({
-                id: result.dictionaryId,
-                dictionaryName: result.dictionaryName,
-                dictionaryId: result.dictionaryId,
-                htmlContent: result.definition, // 直接使用原始 HTML
-                isLoading: false, // HTML 已包含，不再需要单独加载
-            }));
-            setDefinitionBlocks(initialBlocks);
-            setIsGlobalLoading(false);
-
-            // 异步获取关联词
-            window.electronAPI
-                .getAssociatedWords(word)
-                .then(setAssociatedWords)
-                .catch((err) =>
-                    console.error("Failed to get associated words:", err),
+    // 当一个 DictionaryEntryDisplay 完成解析时调用
+    const handleBlockResolved = useCallback(
+        (dictionaryId: string, block: RenderedDefinitionBlock | null) => {
+            setResolvedDefinitionBlocks((prevBlocks) => {
+                const existingIndex = prevBlocks.findIndex(
+                    (b) => b.dictionaryId === dictionaryId,
                 );
-        } catch (error) {
-            console.error(`Error looking up ${word}:`, error);
-            setDefinitionBlocks([
-                {
-                    id: "error",
-                    dictionaryName: "Error",
-                    dictionaryId: "system-error",
-                    htmlContent: `<h2>An error occurred.</h2><p>${(error as Error).message}</p>`,
-                    isLoading: false,
-                },
-            ]);
-            setIsGlobalLoading(false);
-        }
-    }, []);
-
-    // Effect to trigger the main lookup when wordToLookup changes
-    useEffect(() => {
-        // 防抖动可以进一步优化，但现在保持简单
-        const handler = setTimeout(() => {
-            if (wordToLookup) {
-                lookupWord(wordToLookup);
-            }
-        }, 100); // 轻微延迟以避免快速输入时的频繁请求
-
-        return () => clearTimeout(handler);
-    }, [wordToLookup, lookupWord]);
-
-    // --- 全局音频播放器管理 ---
-    const handlePlaySound = useCallback(
-        async (key: string, dictionaryId: string) => {
-            setIsAudioPlaying(true);
-            try {
-                console.log(dictionaryId);
-                // 使用 dictionaryId 来获取资源
-                const resource = await window.electronAPI.getResource({
-                    key,
-                    dictionaryId,
-                });
-                if (resource) {
-                    audioPlayer.src = `data:${resource.mimeType};base64,${resource.data}`;
-                    await audioPlayer.play();
+                if (block) {
+                    if (existingIndex !== -1) {
+                        // 更新现有块
+                        const newBlocks = [...prevBlocks];
+                        newBlocks[existingIndex] = block;
+                        return newBlocks;
+                    } else {
+                        // 添加新块 (理论上不应该发生，因为我们是更新，不是添加)
+                        return [...prevBlocks, block];
+                    }
                 } else {
-                    console.warn(
-                        `Audio resource not found: ${key} in ${dictionaryId}`,
-                    );
-                    setIsAudioPlaying(false);
+                    // 如果 block 为 null，表示该词典没有内容，可以考虑不添加到列表中或添加一个空块
+                    if (existingIndex !== -1) {
+                        return prevBlocks.filter(
+                            (b) => b.dictionaryId !== dictionaryId,
+                        );
+                    }
+                    return prevBlocks;
                 }
-            } catch (error) {
-                console.error(`Error playing audio ${key}:`, error);
-                setIsAudioPlaying(false);
+            });
+            pendingResolutions.current.delete(dictionaryId);
+
+            // 如果所有块都已解析完毕，则设置全局加载为 false
+            if (pendingResolutions.current.size === 0) {
+                setIsGlobalLoading(false);
             }
         },
         [],
     );
 
+    const lookupWord = useCallback(
+        async (word: string) => {
+            if (!word) return;
+            setIsGlobalLoading(true);
+            setRawDefinitionResults([]);
+            setResolvedDefinitionBlocks([]); // 清空之前的解析结果
+            setAssociatedWords([]);
+            pendingResolutions.current.clear(); // 清空待处理的解析任务
+
+            try {
+                const rawResults = await window.electronAPI.lookup(word);
+
+                if (rawResults.length === 0) {
+                    setResolvedDefinitionBlocks([
+                        {
+                            id: "not-found",
+                            dictionaryName: "System",
+                            dictionaryId: "system-not-found",
+                            htmlContent: `<h2>'${word}' not found.</h2>`,
+                            isLoading: false,
+                        },
+                    ]);
+                    setIsGlobalLoading(false);
+                    return;
+                }
+
+                console.log(config?.configs);
+
+                const rawResultsWithName = rawResults.map((result) => ({
+                    ...result,
+                    dictionaryName:
+                        config?.configs[result.dictionaryId]?.customName ||
+                        result.dictionaryName,
+                }));
+
+                setRawDefinitionResults(rawResultsWithName);
+                console.log(rawResultsWithName);
+                // 初始化 pendingResolutions
+                rawResultsWithName.forEach((result) =>
+                    pendingResolutions.current.add(result.dictionaryId),
+                );
+                // 如果没有实际的词典结果（比如都因为配置过滤掉了），则可能需要在这里设置 isLoading(false)
+                if (rawResultsWithName.length === 0) {
+                    setIsGlobalLoading(false);
+                }
+
+                // 异步获取关联词
+                window.electronAPI
+                    .getAssociatedWords(word)
+                    .then(setAssociatedWords)
+                    .catch((err) =>
+                        console.error("Failed to get associated words:", err),
+                    );
+            } catch (error) {
+                console.error(`Error looking up ${word}:`, error);
+                setResolvedDefinitionBlocks([
+                    {
+                        id: "error",
+                        dictionaryName: "Error",
+                        dictionaryId: "system-error",
+                        htmlContent: `<h2>An error occurred.</h2><p>${(error as Error).message}</p>`,
+                        isLoading: false,
+                    },
+                ]);
+                setIsGlobalLoading(false);
+            }
+        },
+        [config], // lookupWord 依赖项为空，因为它只依赖于传入的 word
+    );
+
+    // Effect to trigger the main lookup when wordToSearch changes OR config changes
     useEffect(() => {
-        const onEnded = () => setIsAudioPlaying(false);
-        audioPlayer.addEventListener("ended", onEnded);
-        return () => audioPlayer.removeEventListener("ended", onEnded);
-    }, []);
+        const handler = setTimeout(() => {
+            if (wordToSearch) {
+                console.log(
+                    "Triggering lookup due to word or config change:",
+                    wordToSearch,
+                );
+                lookupWord(wordToSearch);
+            } else {
+                // 如果 wordToSearch 为空，清空所有显示
+                setRawDefinitionResults([]);
+                setResolvedDefinitionBlocks([]);
+                setAssociatedWords([]);
+                setIsGlobalLoading(false);
+                pendingResolutions.current.clear();
+            }
+        }, 100); // 100ms debounce
+
+        return () => clearTimeout(handler);
+    }, [wordToSearch, lookupWord, config]); // <--- 关键修改：添加 config 作为依赖项
 
     return (
         <div className={styles.appContainer}>
@@ -152,19 +194,28 @@ const App: React.FC = () => {
             <div className={styles.mainLayout}>
                 <Sidebar
                     associatedWords={associatedWords}
-                    onWordSelect={setWordToLookup}
-                    initialWord={wordToLookup}
+                    onWordSelect={setWordToSearch}
                 />
                 <ContentArea
-                    wordToLookup={wordToLookup}
-                    definitionBlocks={definitionBlocks}
+                    initialWord={wordToSearch} // 传递原始查询词
+                    rawDefinitionResults={rawDefinitionResults} // 传递原始结果
+                    resolvedDefinitionBlocks={resolvedDefinitionBlocks} // 传递最终结果
                     isLoading={isGlobalLoading}
-                    onEntryLinkClick={setWordToLookup}
-                    onSoundLinkClick={handlePlaySound}
-                    userScripts={userScripts} // 将获取到的脚本传递下去
+                    onEntryLinkClick={setWordToSearch}
+                    userScripts={userScripts}
+                    onBlockResolved={handleBlockResolved} // 传递回调函数
                 />
             </div>
         </div>
+    );
+};
+
+// 新的 App 组件，用于包裹 AppContent，提供 AppContext
+const App: React.FC = () => {
+    return (
+        <AppContextProvider>
+            <AppContent />
+        </AppContextProvider>
     );
 };
 

@@ -1,8 +1,9 @@
 // src/components/SettingsModal.tsx
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import type { FullConfig, DictionaryConfig } from "@preload-api";
 import styles from "./SettingsModal.module.css";
-import { useAppContext } from "@renderer/AppContext";
+import { FolderOpenIcon } from "./Icons";
+import { useAppContext } from "@renderer/AppContext"; // 假设你有一个 FolderOpenIcon 组件
 
 // 一个小组件，用于渲染单个词典组
 const DictionaryGroupItem: React.FC<{
@@ -11,6 +12,13 @@ const DictionaryGroupItem: React.FC<{
     onConfigChange: (newConfig: DictionaryConfig) => void;
 }> = ({ group, config, onConfigChange }) => {
     const [isExpanded, setIsExpanded] = useState(false);
+    const [customNameInput, setCustomNameInput] = useState(
+        config.customName || group.name,
+    );
+
+    useEffect(() => {
+        setCustomNameInput(config.customName || group.name);
+    }, [config.customName, group.name]);
 
     const handleGroupToggle = (e: React.ChangeEvent<HTMLInputElement>) => {
         onConfigChange({ ...config, enabled: e.target.checked });
@@ -23,6 +31,21 @@ const DictionaryGroupItem: React.FC<{
         };
         onConfigChange({ ...config, enabledResources: newResources });
     };
+
+    const handleCustomNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const newName = e.target.value.trim();
+        setCustomNameInput(newName);
+        onConfigChange({ ...config, customName: newName || undefined });
+    };
+
+    // 新增：打开路径的处理器，现在它会智能地处理文件和目录
+    const handleOpenPath = useCallback(async (path: string) => {
+        try {
+            await window.electronAPI.openPathInExplorer(path);
+        } catch (error) {
+            console.error("Failed to open path:", error);
+        }
+    }, []);
 
     // 按类型分组资源
     const sortedResources = useMemo(() => {
@@ -46,8 +69,15 @@ const DictionaryGroupItem: React.FC<{
                     htmlFor={`group-toggle-${group.id}`}
                     className={styles.dictGroupName}
                 >
-                    {group.name}
+                    {config.customName || group.name}
                 </label>
+                <button
+                    onClick={() => handleOpenPath(group.mdxPath)} // 打开词典根目录
+                    className={styles.openPathButton}
+                    title="Open dictionary folder"
+                >
+                    <FolderOpenIcon />
+                </button>
                 {group.resources.length > 0 && (
                     <button
                         onClick={() => setIsExpanded(!isExpanded)}
@@ -57,6 +87,17 @@ const DictionaryGroupItem: React.FC<{
                     </button>
                 )}
             </div>
+            <div className={styles.customNameEditor}>
+                <label htmlFor={`custom-name-${group.id}`}>Custom Name:</label>
+                <input
+                    id={`custom-name-${group.id}`}
+                    type="text"
+                    value={customNameInput}
+                    onChange={handleCustomNameChange}
+                    placeholder={`Default: ${group.name}`}
+                />
+            </div>
+
             {isExpanded && (
                 <ul className={styles.resourceList}>
                     {sortedResources.map((res) => (
@@ -82,6 +123,14 @@ const DictionaryGroupItem: React.FC<{
                                 </span>
                                 {res.name}
                             </label>
+                            {/* 新增：打开资源文件所在目录的按钮 */}
+                            <button
+                                onClick={() => handleOpenPath(group.mdxPath)} // 打开该资源所属词典的根目录
+                                className={`${styles.openPathButton} ${styles.resourceOpenPathButton}`}
+                                title="Open dictionary folder"
+                            >
+                                <FolderOpenIcon />
+                            </button>
                         </li>
                     ))}
                 </ul>
@@ -96,17 +145,13 @@ interface SettingsModalProps {
 }
 
 const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
-    // 从全局 Context 中获取原始配置
-    const { config: globalConfig } = useAppContext();
-
-    // 使用本地状态来管理编辑过程中的配置，避免频繁触发全局重载
+    const { config: globalConfig, updateAllDictionaryConfigs } =
+        useAppContext();
     const [localConfig, setLocalConfig] = useState<FullConfig | null>(null);
     const [isSaving, setIsSaving] = useState(false);
 
-    // 当模态框打开时，或全局配置更新时，同步本地状态
     useEffect(() => {
         if (isOpen && globalConfig) {
-            // 创建一个深拷贝以进行本地编辑
             setLocalConfig(JSON.parse(JSON.stringify(globalConfig)));
         }
     }, [isOpen, globalConfig]);
@@ -129,12 +174,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
         if (!localConfig) return;
         setIsSaving(true);
         try {
-            await window.electronAPI.updateConfig(localConfig.configs);
-            // 保存成功后，全局的 AppContext 会自动更新，我们只需关闭模态框
+            await updateAllDictionaryConfigs(localConfig.configs);
             onClose();
         } catch (error) {
             console.error("Failed to save settings:", error);
-            // 可以在此显示错误提示
         } finally {
             setIsSaving(false);
         }
@@ -144,7 +187,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
         setIsSaving(true);
         try {
             await window.electronAPI.addScanPath();
-            // 添加路径后，AppContext 会自动重载，这里我们不需要做任何事
         } catch (error) {
             console.error("Failed to add scan path:", error);
         } finally {
@@ -167,6 +209,15 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
             setIsSaving(false);
         }
     };
+
+    // 统一的打开路径处理器
+    const handleOpenPath = useCallback(async (path: string) => {
+        try {
+            await window.electronAPI.openPathInExplorer(path);
+        } catch (error) {
+            console.error("Failed to open path:", error);
+        }
+    }, []);
 
     if (!isOpen) return null;
 
@@ -198,15 +249,36 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
                                             key={path}
                                             className={styles.pathItem}
                                         >
-                                            <span>{path}</span>
-                                            <button
-                                                onClick={() =>
-                                                    handleRemoveScanPath(path)
-                                                }
-                                                disabled={isSaving}
-                                            >
-                                                Remove
-                                            </button>
+                                            <span className={styles.pathText}>
+                                                {path}
+                                            </span>
+                                            <div className={styles.pathActions}>
+                                                <button
+                                                    onClick={() =>
+                                                        handleOpenPath(path)
+                                                    }
+                                                    className={
+                                                        styles.openPathButton
+                                                    }
+                                                    title="Open folder"
+                                                    disabled={isSaving}
+                                                >
+                                                    <FolderOpenIcon />
+                                                </button>
+                                                <button
+                                                    onClick={() =>
+                                                        handleRemoveScanPath(
+                                                            path,
+                                                        )
+                                                    }
+                                                    className={
+                                                        styles.removeButton
+                                                    }
+                                                    disabled={isSaving}
+                                                >
+                                                    Remove
+                                                </button>
+                                            </div>
                                         </li>
                                     ))}
                                 </ul>
@@ -225,7 +297,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
                             <section className={styles.settingsSection}>
                                 <h3>Available Dictionaries</h3>
                                 {localConfig.discoveredGroups.length === 0 ? (
-                                    <p>
+                                    <p className={styles.noDictionaries}>
                                         No dictionaries found in the scan paths.
                                     </p>
                                 ) : (
@@ -238,7 +310,11 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
                                                     config={
                                                         localConfig.configs[
                                                             group.id
-                                                        ]
+                                                        ] || {
+                                                            enabled: false,
+                                                            enabledResources:
+                                                                {},
+                                                        }
                                                     }
                                                     onConfigChange={(
                                                         newConfig,

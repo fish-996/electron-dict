@@ -27,6 +27,7 @@ interface DictionaryResourceConfig {
 export interface DictionaryConfig {
     enabled: boolean; // 整个词典组是否启用
     enabledResources: DictionaryResourceConfig;
+    customName?: string;
 }
 
 export interface DictionaryGroup {
@@ -49,6 +50,10 @@ export interface ElectronAPI {
         key: string;
         dictionaryId: string; // 参数从 dictionaryName 变为 dictionaryId
     }) => Promise<ResourceResult | null>;
+    lookupInDict: (
+        key: string,
+        dictionaryId: string,
+    ) => Promise<LookupResult | null>;
     getSuggestions: (prefix: string) => Promise<string[]>;
     getAssociatedWords: (phrase: string) => Promise<KeyWordItem[]>;
     getSpellingSuggestions: (
@@ -74,12 +79,16 @@ export interface ElectronAPI {
 
     // --- 事件监听 API ---
     onConfigUpdated: (callback: () => void) => () => void;
+    openPathInExplorer: (path: string) => Promise<void>; // 新增方法
 }
 
 // --- 实现 API ---
 const api: ElectronAPI = {
     // --- 运行时查询 ---
     lookup: (word) => ipcRenderer.invoke("dict:lookup", word),
+
+    lookupInDict: (word, dictionaryId) =>
+        ipcRenderer.invoke("dict:lookupInDict", word, dictionaryId),
 
     getResource: (params) => ipcRenderer.invoke("dict:getResource", params),
 
@@ -119,6 +128,8 @@ const api: ElectronAPI = {
             ipcRenderer.removeListener("config-updated", handler);
         };
     },
+    openPathInExplorer: (path) =>
+        ipcRenderer.invoke("system:open-path-in-explorer", path),
 };
 
 // --- 安全地暴露 API 到渲染进程 ---

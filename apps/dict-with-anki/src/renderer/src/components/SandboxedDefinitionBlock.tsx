@@ -28,7 +28,6 @@ const SandboxedDefinitionBlock: React.FC<SandboxedDefinitionBlockProps> = ({
 
         const parser = new DOMParser();
         const doc = parser.parseFromString(block.htmlContent, "text/html");
-        console.log(doc);
 
         doc.querySelectorAll("img").forEach((img) => {
             const src = img.getAttribute("src");

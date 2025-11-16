@@ -46,6 +46,7 @@ interface WorkerMessage {
     type:
         | "init"
         | "lookup"
+        | "lookupInDict"
         | "getResource"
         | "prefix"
         | "associate"
@@ -55,6 +56,16 @@ interface WorkerMessage {
         | "getAssets";
     payload: any;
 }
+
+const cleanDef = (rawStr: string) => {
+    return (
+        rawStr
+            // eslint-disable-next-line no-control-regex
+            .replace(/\x00/g, "")
+            .replace(/[\r\n]/g, "")
+            .trim()
+    );
+};
 
 /**
  * 查找与 mdx 文件关联的所有资源 (.mdd, .css, .js)
@@ -260,7 +271,7 @@ parentPort?.on("message", async (message: WorkerMessage) => {
                         results.push({
                             dictionaryId: dict.id,
                             dictionaryName: dict.name,
-                            definition: result.definition,
+                            definition: cleanDef(result.definition),
                         });
                     }
                 }
@@ -272,6 +283,43 @@ parentPort?.on("message", async (message: WorkerMessage) => {
                 break;
             }
 
+            case "lookupInDict": {
+                const { word, dictionaryId } = payload; // 使用 ID 来定位词典
+                const targetDict = loadedDictionaries.find(
+                    (d) => d.id === dictionaryId,
+                );
+                if (!targetDict) {
+                    console.warn(
+                        `[Worker] Lookup request failed: Dictionary '${dictionaryId}' not found.`,
+                    );
+                    parentPort?.postMessage({
+                        id,
+                        type: "lookup-dict-result",
+                        payload: null,
+                    });
+                    break;
+                }
+                const result = targetDict.mdx.lookup(word);
+                if (result?.definition) {
+                    parentPort?.postMessage({
+                        id,
+                        type: "lookup-dict-result",
+                        payload: {
+                            dictionaryId: targetDict.id,
+                            dictionaryName: targetDict.name,
+                            definition: cleanDef(result.definition),
+                        },
+                    });
+                } else {
+                    parentPort?.postMessage({
+                        id,
+                        type: "lookup-dict-result",
+                        payload: null,
+                    });
+                }
+                break;
+            }
+
             case "getResource": {
                 const { key, dictionaryId } = payload; // 使用 ID 来定位词典
                 if (!key || !dictionaryId) {
@@ -279,8 +327,6 @@ parentPort?.on("message", async (message: WorkerMessage) => {
                         "getResource requires both 'key' and 'dictionaryId'.",
                     );
                 }
-                console.log(payload);
-                console.log(loadedDictionaries.map((c) => c.id));
 
                 const targetDict = loadedDictionaries.find(
                     (d) => d.id === dictionaryId,

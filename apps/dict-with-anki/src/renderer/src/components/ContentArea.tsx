@@ -1,34 +1,34 @@
 // src/components/ContentArea.tsx
 import React from "react";
-import type { RenderedDefinitionBlock } from "../App";
+import type { RawDefinitionResult, RenderedDefinitionBlock } from "../App";
 import styles from "./ContentArea.module.css";
-// 导入新的沙箱化组件
-import SandboxedDefinitionBlock from "./SandboxedDefinitionBlock";
-import { useAppContext } from "@renderer/AppContext";
+import DictionaryEntryDisplay from "./DictionaryEntryDisplay"; // 导入新的组件
+
 interface ContentAreaProps {
-    wordToLookup: string;
-    definitionBlocks: RenderedDefinitionBlock[];
-    isLoading: boolean;
-    onSoundLinkClick: (key: string, dictionaryId: string) => void; // 参数变为 dictionaryId
+    initialWord: string; // 原始查询词
+    rawDefinitionResults: RawDefinitionResult[]; // 从 App.tsx 接收的原始结果
+    resolvedDefinitionBlocks: RenderedDefinitionBlock[]; // 从 App.tsx 接收的最终解析结果
+    isLoading: boolean; // 全局加载状态
     onEntryLinkClick: (word: string) => void;
-    userScripts: Record<string, string>; // 接收 userScripts
+    userScripts: Record<string, string>;
+    onBlockResolved: (
+        dictionaryId: string,
+        block: RenderedDefinitionBlock | null,
+    ) => void; // 传递给 DictionaryEntryDisplay 的回调
 }
 
 const ContentArea: React.FC<ContentAreaProps> = ({
-    wordToLookup,
-    definitionBlocks,
+    initialWord,
+    rawDefinitionResults,
+    resolvedDefinitionBlocks,
     isLoading,
-    onSoundLinkClick,
     onEntryLinkClick,
     userScripts,
+    onBlockResolved,
 }) => {
-    // --- handleContentClick 逻辑现在被移除了 ---
-    // 因为事件处理已经下放到 SandboxedDefinitionBlock 和其 iframe 内部了
-
-    const { config } = useAppContext();
-
     const renderContent = () => {
-        if (isLoading) {
+        if (isLoading && rawDefinitionResults.length === 0) {
+            // 只有在首次加载且没有原始结果时才显示全局加载指示器
             return (
                 <div className={styles.loader}>
                     <span>Loading...</span>
@@ -36,52 +36,37 @@ const ContentArea: React.FC<ContentAreaProps> = ({
             );
         }
 
-        if (definitionBlocks.length > 0) {
-            return definitionBlocks.map((block, index) => {
-                // 如果是系统消息，则不应用自定义脚本
-                if (block.dictionaryId.startsWith("system-")) {
-                    // 假设你有一个非沙箱化的 DefinitionBlock 用于系统消息
-                    // return <SimpleDefinitionBlock key={block.id} block={block} isFirst={index === 0} />;
-                    // 或者在 SandboxedDefinitionBlock 中处理这种情况
-                }
-
-                // 找到当前词典的配置
-                const dictConfig = config?.configs[block.dictionaryId];
-                if (!dictConfig) return null; // 如果找不到配置，则不渲染
-
-                // 聚合所有启用的 CSS 和 JS
-                const enabledResources = dictConfig.enabledResources || {};
-                const customCss = Object.keys(enabledResources)
-                    .filter(
-                        (path) =>
-                            path.endsWith(".css") && enabledResources[path],
-                    )
-                    .map((path) => userScripts[path] || "")
-                    .join("\n");
-
-                const customJs = Object.keys(enabledResources)
-                    .filter(
-                        (path) =>
-                            path.endsWith(".js") && enabledResources[path],
-                    )
-                    .map((path) => userScripts[path] || "")
-                    .join("\n");
-
+        if (rawDefinitionResults.length > 0) {
+            // 如果过滤后没有结果
+            if (rawDefinitionResults.length === 0 && !isLoading) {
                 return (
-                    <SandboxedDefinitionBlock
-                        key={block.id}
-                        block={block}
-                        isFirst={index === 0}
-                        onSoundLinkClick={onSoundLinkClick}
+                    <div className={styles.welcome}>
+                        <h1>
+                            No enabled dictionaries found for '{initialWord}'
+                        </h1>
+                        <p>Please check your dictionary settings.</p>
+                    </div>
+                );
+            }
+
+            return rawDefinitionResults.map((rawResult, index) => {
+                // DictionaryEntryDisplay 会处理其内部的加载、重定向和错误状态
+                return (
+                    <DictionaryEntryDisplay
+                        key={rawResult.dictionaryId}
+                        initialWord={initialWord}
+                        rawResult={rawResult}
+                        onContentResolved={onBlockResolved}
                         onEntryLinkClick={onEntryLinkClick}
-                        customCss={customCss}
-                        customJs={customJs}
+                        isFirst={index === 0}
+                        userScripts={userScripts}
                     />
                 );
             });
         }
 
-        if (!wordToLookup) {
+        // 如果没有 initialWord 且没有加载，显示欢迎信息
+        if (!initialWord && !isLoading) {
             return (
                 <div className={styles.welcome}>
                     <h1>Welcome to MDict Reader</h1>
@@ -91,13 +76,28 @@ const ContentArea: React.FC<ContentAreaProps> = ({
             );
         }
 
-        return null; // "not found" 案例由 definition block 处理
+        // "not found" 和错误信息现在由 App.tsx 直接通过 resolvedDefinitionBlocks 处理
+        // 如果 resolvedDefinitionBlocks 中有系统消息，我们直接渲染它们
+        const systemBlocks = resolvedDefinitionBlocks.filter((block) =>
+            block.dictionaryId.startsWith("system-"),
+        );
+        if (systemBlocks.length > 0) {
+            return systemBlocks.map((block, _) => (
+                <div key={block.id} className="dictionary-block">
+                    <h3>{block.dictionaryName}</h3>
+                    <div
+                        dangerouslySetInnerHTML={{
+                            __html: block.htmlContent || "",
+                        }}
+                    />
+                </div>
+            ));
+        }
+
+        return null; // 默认不渲染任何东西
     };
 
-    return (
-        // onClick 事件处理器可以移除了
-        <main className={styles.content}>{renderContent()}</main>
-    );
+    return <main className={styles.content}>{renderContent()}</main>;
 };
 
 export default ContentArea;

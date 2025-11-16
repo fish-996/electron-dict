@@ -1,39 +1,134 @@
 /* src/components/Header.module.css */
 
+/* 定义一些硬编码的颜色和尺寸，以便替换CSS变量 */
+/* 假设的深色模式主题 */
+:root {
+    /* 背景色 */
+    --color-bg-primary: #282c34;
+    --color-bg-secondary: #3c4048;
+    --color-bg-hover: #4a4e56;
+
+    /* 文本颜色 */
+    --color-text-primary: #e0e0e0;
+    --color-text-secondary: #a0a0a0;
+
+    /* 强调色 */
+    --color-accent: #61dafb; /* 常见的React蓝色 */
+    --color-accent-dark: #4fa3d7;
+
+    /* 边框色 */
+    --color-border: #50545c;
+    --color-border-hover: #7b8089;
+
+    /* 阴影 */
+    --shadow-small: 0 2px 4px rgba(0, 0, 0, 0.2);
+    --shadow-medium: 0 4px 8px rgba(0, 0, 0, 0.3);
+
+    /* 圆角 */
+    --border-radius: 4px;
+}
+
 .header {
+    -webkit-app-region: drag; /* 允许拖动窗口 */
     display: flex;
-    align-items: center;
     justify-content: space-between;
-    padding: 10px 15px;
-    border-bottom: 1px solid #333;
-    flex-shrink: 0; /* Prevent header from shrinking */
-    background-color: #252526;
+    align-items: center;
+    padding: 10px 20px;
+    background-color: #282c34; /* --color-bg-primary */
+    border-bottom: 1px solid #50545c; /* --color-border */
+    color: #e0e0e0; /* --color-text-primary */
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2); /* --shadow-small */
 }
 
 .title {
-    font-size: 1.2rem;
-    font-weight: 600;
+    -webkit-app-region: no-drag; /* 标题区域不允许拖动 */
     margin: 0;
-    color: #ccc;
+    font-size: 1.5em;
+    font-weight: 600;
+    color: #61dafb; /* --color-accent */
 }
 
+.controls {
+    -webkit-app-region: no-drag; /* 控制区域不允许拖动 */
+    display: flex;
+    gap: 15px;
+    align-items: center;
+}
+
+/* Settings Button */
 .settingsButton {
-    background-color: transparent;
+    background: none;
     border: none;
-    color: #d4d4d4;
-    border-radius: 4px;
     cursor: pointer;
+    padding: 5px;
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 5px;
-    transition: background-color 0.2s;
+    color: #a0a0a0; /* --color-text-secondary */
+    transition:
+        color 0.2s ease,
+        transform 0.2s ease;
 }
 
 .settingsButton:hover {
-    background-color: #3c3c3c;
+    color: #61dafb; /* --color-accent */
+    transform: scale(1.1);
 }
 
-.settingsButton:focus {
-    outline: 1px solid #007acc;
+.settingsButton svg {
+    width: 24px;
+    height: 24px;
+}
+
+/* Dictionary Buttons Container */
+.dictionaryButtonsContainer {
+    display: flex;
+    gap: 8px; /* 词典按钮之间的间距 */
+    flex-wrap: wrap; /* 允许换行，以防词典过多 */
+    max-width: 600px; /* 限制宽度，根据实际情况调整 */
+    justify-content: flex-end; /* 靠右对齐 */
+}
+
+.dictionaryToggleBtn {
+    background-color: #3c4048; /* --color-bg-secondary */
+    color: #e0e0e0; /* --color-text-primary */
+    padding: 6px 10px;
+    border: 1px solid #50545c; /* --color-border */
+    border-radius: 4px; /* --border-radius */
+    cursor: pointer;
+    font-size: 0.85em;
+    transition:
+        background-color 0.2s ease,
+        border-color 0.2s ease,
+        color 0.2s ease;
+    white-space: nowrap; /* 防止按钮文本换行 */
+}
+
+.dictionaryToggleBtn.enabled {
+    background-color: #61dafb; /* --color-accent */
+    border-color: #61dafb; /* --color-accent */
+    color: white;
+}
+
+.dictionaryToggleBtn.enabled:hover {
+    background-color: #4fa3d7; /* --color-accent-dark */
+    border-color: #4fa3d7; /* --color-accent-dark */
+}
+
+.dictionaryToggleBtn.disabled {
+    background-color: #3c4048; /* --color-bg-secondary */
+    border-color: #50545c; /* --color-border */
+    color: #a0a0a0; /* --color-text-secondary */
+}
+
+.dictionaryToggleBtn.disabled:hover {
+    background-color: #4a4e56; /* --color-bg-hover */
+    border-color: #7b8089; /* --color-border-hover */
+    color: #e0e0e0; /* --color-text-primary */
+}
+
+.noDictionariesText {
+    color: #a0a0a0; /* --color-text-secondary */
+    font-style: italic;
+    font-size: 0.85em;
 }

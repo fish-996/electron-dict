@@ -10,6 +10,8 @@ import {
 } from "./dictionaryService";
 import type { KeyWordItem, FuzzyWord } from "js-mdict";
 import Store from "electron-store";
+import fs from "fs/promises";
+import path from "path";
 
 // --- 新的存储结构和类型 ---
 interface DictionaryResourceConfig {
@@ -19,6 +21,7 @@ interface DictionaryResourceConfig {
 export interface DictionaryConfig {
     enabled: boolean; // 整个词典组是否启用
     enabledResources: DictionaryResourceConfig;
+    customName?: string;
 }
 
 interface AppStore {
@@ -322,6 +325,17 @@ ipcMain.handle(
     (_event, word: string): Promise<LookupResult[]> =>
         dictionaryService.lookup(word),
 );
+
+ipcMain.handle(
+    "dict:lookupInDict",
+    (
+        _event,
+        word: string,
+        dictionaryId: string,
+    ): Promise<LookupResult | null> =>
+        dictionaryService.lookupInDict(word, dictionaryId),
+);
+
 ipcMain.handle(
     "dict:getResource",
     (
@@ -410,5 +424,38 @@ ipcMain.handle(
         store.set("dictionaryConfigs", updatedConfigs);
         await initializeAndLoadDictionaries(); // 配置已更改，重新加载
         return true;
+    },
+);
+
+ipcMain.handle(
+    "system:open-path-in-explorer",
+    async (_, targetPath: string) => {
+        // 将参数名改为 targetPath
+        try {
+            let pathToOpen = targetPath; // 默认打开目标路径
+
+            // 尝试获取路径的状态，判断是文件还是目录
+            const stats = await fs.stat(targetPath);
+
+            if (stats.isFile()) {
+                // 如果是文件，则打开其所在的目录
+                pathToOpen = path.dirname(targetPath);
+            }
+            // 如果是目录，pathToOpen 保持不变 (targetPath)
+
+            // 使用 shell.openPath 打开路径
+            const result = await shell.openPath(pathToOpen);
+
+            if (result) {
+                // shell.openPath 返回空字符串表示成功，否则是错误信息
+                console.error(`Failed to open path ${pathToOpen}: ${result}`);
+                throw new Error(`Failed to open path: ${result}`);
+            }
+            console.log(`Opened path: ${pathToOpen}`);
+        } catch (error) {
+            // 捕获文件系统操作或 shell.openPath 的错误
+            console.error(`Error opening path ${targetPath}:`, error);
+            throw new Error(`Failed to open path: ${(error as Error).message}`);
+        }
     },
 );

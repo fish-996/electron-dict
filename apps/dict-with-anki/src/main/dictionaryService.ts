@@ -211,9 +211,19 @@ class DictionaryService {
     public async lookup(word: string): Promise<LookupResult[]> {
         if (!this.isReady || !word) return [];
 
-        console.log(word);
-
         return this.postMessage<LookupResult[]>("lookup", { word });
+    }
+
+    public async lookupInDict(
+        word: string,
+        dictionaryId: string,
+    ): Promise<LookupResult | null> {
+        if (!this.isReady || !word) return null;
+
+        return this.postMessage<LookupResult | null>("lookupInDict", {
+            word,
+            dictionaryId,
+        });
     }
 
     public async getResource(

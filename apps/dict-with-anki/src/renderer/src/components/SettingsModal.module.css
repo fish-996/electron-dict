@@ -1,12 +1,49 @@
 /* src/SettingsModal.module.css */
 
+/* 定义一些硬编码的颜色和尺寸，以适应深色模式 */
+:root {
+    /* 背景色 */
+    --modal-bg-primary: #2e2e2e; /* 模态框主体背景 */
+    --modal-bg-secondary: #3c3c3c; /* 内部区域（如列表项、组头）背景 */
+    --modal-bg-tertiary: #333333; /* 资源列表或更深一层背景 */
+    --modal-bg-hover: #4a4a4a; /* 交互元素悬停背景 */
+
+    /* 文本颜色 */
+    --modal-text-primary: #e0e0e0; /* 主要文本 */
+    --modal-text-secondary: #a0a0a0; /* 次要文本，提示信息 */
+
+    /* 强调色 */
+    --modal-accent: #007bff; /* 主要操作按钮 */
+    --modal-accent-hover: #0056b3;
+
+    /* 边框色 */
+    --modal-border: #444444; /* 分隔线、边框 */
+    --modal-border-light: #555555; /* 略浅的边框 */
+
+    /* 错误/警告色 */
+    --modal-error: #f44336;
+    --modal-error-hover: #d32f2f;
+
+    /* 标签颜色 (示例，可根据实际资源类型调整) */
+    --tag-mdd: #4caf50;
+    --tag-css: #2196f3;
+    --tag-js: #ff9800;
+
+    /* 基础尺寸 */
+    --modal-border-radius: 8px;
+    --modal-border-radius-small: 4px;
+    --modal-padding-small: 0.5rem;
+    --modal-padding-medium: 0.75rem;
+    --modal-padding-large: 1rem;
+}
+
 .modalOverlay {
     position: fixed;
     top: 0;
     left: 0;
     right: 0;
     bottom: 0;
-    background-color: rgba(0, 0, 0, 0.6);
+    background-color: rgba(0, 0, 0, 0.7);
     display: flex;
     justify-content: center;
     align-items: center;
@@ -14,99 +51,431 @@
 }
 
 .modalContent {
-    background-color: #2e2e2e;
+    background-color: var(--modal-bg-primary);
     padding: 20px;
-    border-radius: 8px;
+    border-radius: var(--modal-border-radius);
     width: 80%;
     max-width: 700px;
     max-height: 80vh;
     display: flex;
     flex-direction: column;
+    color: var(--modal-text-primary);
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.5);
 }
 
 .modalHeader {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    border-bottom: 1px solid #444;
+    border-bottom: 1px solid var(--modal-border);
     padding-bottom: 10px;
     margin-bottom: 15px;
 }
 
 .modalHeader h2 {
     margin: 0;
+    color: var(--modal-text-primary);
 }
 
 .closeButton {
     background: none;
     border: none;
-    font-size: 1.5rem;
-    color: #aaa;
+    font-size: 1.8rem;
+    line-height: 1;
+    color: var(--modal-text-secondary);
     cursor: pointer;
+    padding: 0 5px;
+    transition: color 0.2s ease;
+}
+
+.closeButton:hover {
+    color: var(--modal-text-primary);
 }
 
 .modalBody {
     flex-grow: 1;
     overflow-y: auto;
+    padding-right: 5px;
 }
 
-.dictList {
-    list-style-type: none;
+/* Custom Scrollbar for modalBody */
+.modalBody::-webkit-scrollbar {
+    width: 8px;
+}
+
+.modalBody::-webkit-scrollbar-track {
+    background: var(--modal-bg-secondary);
+    border-radius: var(--modal-border-radius-small);
+}
+
+.modalBody::-webkit-scrollbar-thumb {
+    background: #666;
+    border-radius: var(--modal-border-radius-small);
+}
+
+.modalBody::-webkit-scrollbar-thumb:hover {
+    background: #888;
+}
+
+.settingsSection {
+    margin-bottom: 1.5rem;
+    border-bottom: 1px solid var(--modal-border);
+    padding-bottom: 1rem;
+}
+
+.settingsSection:last-child {
+    border-bottom: none;
+    margin-bottom: 0;
+}
+
+.settingsSection h3 {
+    margin-top: 0;
+    margin-bottom: 1rem;
+    color: var(--modal-text-primary);
+    font-size: 1.2rem;
+}
+
+.pathList,
+.dictGroupList {
+    list-style: none;
     padding: 0;
     margin: 0;
 }
 
-.dictItem {
+.pathItem {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 10px;
-    border-bottom: 1px solid #3a3a3a;
-}
-
-.dictItem:last-child {
-    border-bottom: none;
-}
-
-.dictPath {
-    flex-grow: 1;
-    margin-right: 15px;
-    word-break: break-all;
+    padding: var(--modal-padding-small) var(--modal-padding-medium);
+    border-radius: var(--modal-border-radius-small);
+    background-color: var(--modal-bg-secondary);
+    margin-bottom: 0.5rem;
     font-size: 0.9em;
-    color: #ccc;
+    color: var(--modal-text-primary);
+    border: 1px solid var(--modal-border-light);
+}
+
+.pathText {
+    flex-grow: 1;
+    margin-right: 10px; /* 留出空间给操作按钮 */
+    word-break: break-all;
+}
+
+.pathActions {
+    display: flex;
+    gap: 8px; /* 操作按钮之间的间距 */
+    align-items: center;
+}
+
+/* Open Path Button 基础样式 (通用，用于扫描路径和词典组/资源) */
+.openPathButton {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 5px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--modal-text-secondary);
+    transition:
+        color 0.2s ease,
+        transform 0.2s ease;
+}
+
+.openPathButton:hover:not(:disabled) {
+    color: var(--modal-accent);
+    transform: scale(1.1);
+}
+
+.openPathButton:disabled {
+    color: #555;
+    cursor: not-allowed;
+    opacity: 0.7;
+}
+
+.openPathButton svg {
+    width: 20px;
+    height: 20px;
 }
 
 .removeButton {
-    background-color: #b71c1c;
+    background-color: var(--modal-error);
     color: white;
     border: none;
-    padding: 5px 10px;
-    border-radius: 4px;
+    padding: 0.3rem 0.6rem;
+    border-radius: var(--modal-border-radius-small);
     cursor: pointer;
+    font-size: 0.8em;
+    transition: background-color 0.2s ease;
+}
+
+.removeButton:hover:not(:disabled) {
+    background-color: var(--modal-error-hover);
 }
 
 .removeButton:disabled {
     background-color: #555;
+    cursor: not-allowed;
+    opacity: 0.7;
+}
+
+.settingsSection > button {
+    /* Add Scan Path Button */
+    background-color: var(--modal-accent);
+    color: white;
+    padding: 0.5rem 1rem;
+    border: none;
+    border-radius: var(--modal-border-radius-small);
+    cursor: pointer;
+    margin-top: 1rem;
+    transition: background-color 0.2s ease;
+}
+
+.settingsSection > button:hover:not(:disabled) {
+    background-color: var(--modal-accent-hover);
+}
+
+.settingsSection > button:disabled {
+    background-color: #555;
+    cursor: not-allowed;
+    opacity: 0.7;
+}
+
+.hint {
+    font-size: 0.85em;
+    color: var(--modal-text-secondary);
+    margin-top: 0.5rem;
+    line-height: 1.4;
+}
+
+.noDictionaries {
+    color: var(--modal-text-secondary);
+    font-style: italic;
+    padding: 1rem 0;
+    text-align: center;
+}
+
+.dictGroup {
+    border: 1px solid var(--modal-border-light);
+    border-radius: var(--modal-border-radius);
+    margin-bottom: 0.75rem;
+    overflow: hidden;
+    background-color: var(--modal-bg-secondary);
+}
+
+.dictGroupHeader {
+    display: flex;
+    align-items: center;
+    padding: var(--modal-padding-medium) var(--modal-padding-large);
+    background-color: var(--modal-bg-secondary);
+    border-bottom: 1px solid var(--modal-border);
+}
+
+.dictGroupHeader input[type="checkbox"] {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 18px;
+    height: 18px;
+    border: 2px solid var(--modal-text-secondary);
+    border-radius: var(--modal-border-radius-small);
+    background-color: var(--modal-bg-primary);
+    outline: none;
+    cursor: pointer;
+    margin-right: 0.5rem;
+    transition:
+        background-color 0.2s ease,
+        border-color 0.2s ease;
+}
+
+.dictGroupHeader input[type="checkbox"]:checked {
+    background-color: var(--modal-accent);
+    border-color: var(--modal-accent);
+}
+
+.dictGroupHeader input[type="checkbox"]:checked::before {
+    content: "\2713"; /* Checkmark */
+    display: block;
+    color: white;
+    font-size: 14px;
+    line-height: 14px;
+    text-align: center;
+}
+
+.dictGroupName {
+    flex-grow: 1;
+    margin-left: 0.5rem;
+    font-weight: bold;
+    cursor: pointer;
+    color: var(--modal-text-primary);
+    margin-right: 10px; /* 为 openPathButton 留出空间 */
+}
+
+/* 调整 dictGroupHeader 中 openPathButton 和 expandButton 的间距和位置 */
+.dictGroupHeader .openPathButton {
+    margin-left: auto; /* 将 openPathButton 推到右边，但仍在 expandButton 之前 */
+    margin-right: 5px; /* 与 expandButton 的间距 */
+    flex-shrink: 0; /* 防止被挤压 */
+}
+.dictGroupHeader .expandButton {
+    margin-left: 0; /* expandButton 紧随 openPathButton */
+    background: none;
+    border: 1px solid #777;
+    border-radius: var(--modal-border-radius-small);
+    padding: 0.2rem 0.6rem;
+    cursor: pointer;
+    color: var(--modal-text-secondary);
+    transition:
+        background-color 0.2s ease,
+        border-color 0.2s ease,
+        color 0.2s ease;
+    flex-shrink: 0; /* 防止被挤压 */
+}
+
+.dictGroupHeader .expandButton:hover {
+    background-color: var(--modal-bg-hover);
+    border-color: var(--modal-text-secondary);
+    color: var(--modal-text-primary);
+}
+
+/* 自定义名称编辑器样式 */
+.customNameEditor {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: var(--modal-padding-medium) var(--modal-padding-large);
+    background-color: var(--modal-bg-tertiary);
+    border-top: 1px solid var(--modal-border);
+    color: var(--modal-text-primary);
+    font-size: 0.9em;
+}
+
+.customNameEditor label {
+    font-weight: normal;
+    white-space: nowrap;
+    min-width: 80px;
+    color: var(--modal-text-secondary);
+}
+
+.customNameEditor input[type="text"] {
+    flex-grow: 1;
+    padding: 8px 12px;
+    border: 1px solid var(--modal-border-light);
+    border-radius: var(--modal-border-radius-small);
+    background-color: var(--modal-bg-primary);
+    color: var(--modal-text-primary);
+    font-size: 1em;
+    outline: none;
+    transition:
+        border-color 0.2s ease,
+        background-color 0.2s ease;
+}
+
+.customNameEditor input[type="text"]:focus {
+    border-color: var(--modal-accent);
+    background-color: var(--modal-bg-hover);
+}
+
+.customNameEditor input[type="text"]::placeholder {
+    color: var(--modal-text-secondary);
+}
+
+.resourceList {
+    list-style: none;
+    padding: var(--modal-padding-medium) var(--modal-padding-large);
+    background-color: var(--modal-bg-tertiary);
+    border-top: 1px solid var(--modal-border);
+}
+
+.resourceItem {
+    display: flex;
+    align-items: center;
+    padding: 0.4rem 0;
+    color: var(--modal-text-primary);
+    position: relative;
+}
+
+.resourceItem label {
+    flex-grow: 1; /* 让 label 占据尽可能多的空间 */
+    margin-left: 0.5rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    cursor: pointer;
+    font-size: 0.9em;
+}
+
+.resourceOpenPathButton {
+    /* 针对 resourceItem 内部的 openPathButton */
+    margin-left: auto; /* 将按钮推到最右边 */
+    flex-shrink: 0; /* 防止按钮被压缩 */
+}
+
+.resourceTag {
+    font-size: 0.7em;
+    font-weight: bold;
+    padding: 0.1rem 0.4rem;
+    border-radius: 3px;
+    color: white;
+    text-transform: uppercase;
+    min-width: 35px;
+    text-align: center;
+}
+
+/* 标签颜色 */
+.mdd {
+    background-color: var(--tag-mdd);
+}
+.css {
+    background-color: var(--tag-css);
+}
+.js {
+    background-color: var(--tag-js);
 }
 
 .modalFooter {
-    border-top: 1px solid #444;
+    border-top: 1px solid var(--modal-border);
     padding-top: 15px;
     margin-top: 15px;
     text-align: right;
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
 }
 
 .modalFooter button {
-    background-color: #007bff;
-    color: white;
     padding: 10px 15px;
     border: none;
-    border-radius: 4px;
+    border-radius: var(--modal-border-radius-small);
     cursor: pointer;
+    font-size: 1em;
+    transition:
+        background-color 0.2s ease,
+        opacity 0.2s ease;
 }
 
 .modalFooter button:disabled {
     background-color: #555;
+    cursor: not-allowed;
+    opacity: 0.7;
+}
+
+.cancelButton {
+    background-color: #757575;
+    color: white;
+}
+
+.cancelButton:hover:not(:disabled) {
+    background-color: #5a5a5a;
+}
+
+.modalFooter button:not(.cancelButton) {
+    /* Save and Reload Button */
+    background-color: var(--modal-accent);
+    color: white;
+}
+
+.modalFooter button:not(.cancelButton):hover:not(:disabled) {
+    background-color: var(--modal-accent-hover);
 }
 
 .loadingOverlay {
@@ -115,130 +484,12 @@
     left: 0;
     right: 0;
     bottom: 0;
-    background-color: rgba(255, 255, 255, 0.7);
+    background-color: rgba(0, 0, 0, 0.7);
     display: flex;
     justify-content: center;
     align-items: center;
     z-index: 10;
-}
-
-.settingsSection {
-    margin-bottom: 2rem;
-    border-bottom: 1px solid #eee;
-    padding-bottom: 1rem;
-}
-
-.settingsSection:last-child {
-    border-bottom: none;
-}
-
-.settingsSection h3 {
-    margin-top: 0;
-    margin-bottom: 1rem;
-    color: #333;
-}
-
-.pathList,
-.dictGroupList {
-    list-style: none;
-    padding: 0;
-}
-
-.pathItem {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 0.5rem;
-    border-radius: 4px;
-    background-color: #f9f9f9;
-    margin-bottom: 0.5rem;
-    font-size: 0.9em;
-}
-
-.pathItem button {
-    background-color: #f44336;
     color: white;
-    border: none;
-    padding: 0.3rem 0.6rem;
-    border-radius: 4px;
-    cursor: pointer;
-}
-
-.hint {
-    font-size: 0.85em;
-    color: #666;
-    margin-top: 0.5rem;
-}
-
-.dictGroup {
-    border: 1px solid #e0e0e0;
-    border-radius: 6px;
-    margin-bottom: 1rem;
-    overflow: hidden;
-}
-
-.dictGroupHeader {
-    display: flex;
-    align-items: center;
-    padding: 0.75rem;
-    background-color: #f5f5f5;
-}
-
-.dictGroupName {
-    flex-grow: 1;
-    margin-left: 0.5rem;
-    font-weight: bold;
-    cursor: pointer;
-}
-
-.expandButton {
-    margin-left: auto;
-    background: none;
-    border: 1px solid #ccc;
-    border-radius: 4px;
-    padding: 0.2rem 0.5rem;
-    cursor: pointer;
-}
-
-.resourceList {
-    list-style: none;
-    padding: 0.75rem;
-    background-color: #fff;
-}
-
-.resourceItem {
-    display: flex;
-    align-items: center;
-    padding: 0.3rem 0;
-}
-
-.resourceItem label {
-    margin-left: 0.5rem;
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    cursor: pointer;
-}
-
-.resourceTag {
-    font-size: 0.75em;
-    font-weight: bold;
-    padding: 0.1rem 0.4rem;
-    border-radius: 3px;
-    color: white;
-    text-transform: uppercase;
-}
-
-.mdd {
-    background-color: #4caf50;
-}
-.css {
-    background-color: #2196f3;
-}
-.js {
-    background-color: #ff9800;
-}
-
-.cancelButton {
-    background-color: #757575;
+    font-size: 1.2em;
+    border-radius: var(--modal-border-radius);
 }
