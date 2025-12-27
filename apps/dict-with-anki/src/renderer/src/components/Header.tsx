@@ -6,9 +6,15 @@ import { useAppContext } from "../AppContext";
 
 interface HeaderProps {
     onSettingsClick: () => void;
+    onCreateAnkiCard: () => void;
+    canCreateAnkiCard: boolean;
 }
 
-const Header: React.FC<HeaderProps> = ({ onSettingsClick }) => {
+const Header: React.FC<HeaderProps> = ({
+    onSettingsClick,
+    onCreateAnkiCard,
+    canCreateAnkiCard,
+}) => {
     const { config, updateDictionaryConfig } = useAppContext();
 
     const allDictionaries = useMemo(() => {
@@ -67,6 +73,20 @@ const Header: React.FC<HeaderProps> = ({ onSettingsClick }) => {
                         ))
                     )}
                 </div>
+
+                <button
+                    className={styles.ankiButton}
+                    onClick={onCreateAnkiCard}
+                    aria-label="Create Anki Card"
+                    disabled={!canCreateAnkiCard}
+                    title={
+                        canCreateAnkiCard
+                            ? "Create Anki card from current search"
+                            : "Search a word first"
+                    }
+                >
+                    Create Card
+                </button>
 
                 <button
                     className={styles.settingsButton}

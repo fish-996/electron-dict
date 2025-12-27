@@ -8,6 +8,9 @@ import Header from "./components/Header";
 import Sidebar from "./components/Sidebar";
 import ContentArea from "./components/ContentArea";
 import SettingsModal from "./components/SettingsModal";
+import AnkiCardModal, {
+    type AnkiCardDraftContext,
+} from "./components/AnkiCardModal";
 import type { KeyWordItem } from "js-mdict";
 
 // 新增：定义从 Dict 服务返回的原始结果类型
@@ -37,6 +40,10 @@ const AppContent: React.FC = () => {
     // --- 本地状态 ---
     const [wordToSearch, setWordToSearch] = useState(""); // 用户最初输入的词
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+
+    const [isAnkiModalOpen, setIsAnkiModalOpen] = useState(false);
+    const [ankiDraftContext, setAnkiDraftContext] =
+        useState<AnkiCardDraftContext | null>(null);
 
     // 存储从 Electron IPC 获得的原始查询结果 (可能包含 @@@LINK=)
     const [rawDefinitionResults, setRawDefinitionResults] = useState<
@@ -182,6 +189,29 @@ const AppContent: React.FC = () => {
         return () => clearTimeout(handler);
     }, [wordToSearch, lookupWord, config]); // <--- 关键修改：添加 config 作为依赖项
 
+    const canCreateAnkiCard = Boolean(wordToSearch);
+
+    const openAnkiModal = useCallback(() => {
+        if (!wordToSearch) return;
+
+        const blocks = resolvedDefinitionBlocks
+            .filter((b) => !b.dictionaryId.startsWith("system-"))
+            .filter((b) => Boolean(b.htmlContent))
+            .map((b) => ({
+                dictionaryId: b.dictionaryId,
+                dictionaryName: b.dictionaryName,
+                htmlContent: b.htmlContent as string,
+            }));
+
+        const snapshot: AnkiCardDraftContext = {
+            searchWord: wordToSearch,
+            blocks,
+        };
+
+        setAnkiDraftContext(snapshot);
+        setIsAnkiModalOpen(true);
+    }, [resolvedDefinitionBlocks, wordToSearch]);
+
     return (
         <div className={styles.appContainer}>
             <SettingsModal
@@ -189,7 +219,19 @@ const AppContent: React.FC = () => {
                 onClose={() => setIsSettingsOpen(false)}
             />
 
-            <Header onSettingsClick={() => setIsSettingsOpen(true)} />
+            {ankiDraftContext && (
+                <AnkiCardModal
+                    isOpen={isAnkiModalOpen}
+                    onClose={() => setIsAnkiModalOpen(false)}
+                    context={ankiDraftContext}
+                />
+            )}
+
+            <Header
+                onSettingsClick={() => setIsSettingsOpen(true)}
+                onCreateAnkiCard={openAnkiModal}
+                canCreateAnkiCard={canCreateAnkiCard}
+            />
 
             <div className={styles.mainLayout}>
                 <Sidebar

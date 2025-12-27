@@ -55,6 +55,32 @@
     align-items: center;
 }
 
+/* Anki Button */
+.ankiButton {
+    background-color: #3c4048;
+    color: #e0e0e0;
+    padding: 6px 10px;
+    border: 1px solid #50545c;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.85em;
+    transition:
+        background-color 0.2s ease,
+        border-color 0.2s ease,
+        color 0.2s ease;
+    white-space: nowrap;
+}
+
+.ankiButton:hover:not(:disabled) {
+    background-color: #4a4e56;
+    border-color: #7b8089;
+}
+
+.ankiButton:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
 /* Settings Button */
 .settingsButton {
     background: none;

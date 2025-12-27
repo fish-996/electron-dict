@@ -1,0 +1,206 @@
+.overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.55);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+}
+
+.modal {
+    width: min(1100px, 92vw);
+    height: min(720px, 90vh);
+    background: #282c34;
+    border: 1px solid #50545c;
+    border-radius: 8px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.header {
+    padding: 12px 16px;
+    border-bottom: 1px solid #50545c;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.title {
+    font-size: 1.05em;
+    font-weight: 600;
+    color: #e0e0e0;
+}
+
+.body {
+    flex: 1;
+    display: grid;
+    grid-template-columns: 420px 1fr;
+    min-height: 0;
+}
+
+.left {
+    border-right: 1px solid #50545c;
+    padding: 12px 16px;
+    overflow: auto;
+}
+
+.right {
+    padding: 12px 16px;
+    overflow: auto;
+}
+
+.sectionTitle {
+    margin: 0 0 8px 0;
+    font-size: 0.9em;
+    color: #a0a0a0;
+}
+
+.field {
+    margin-bottom: 12px;
+}
+
+.fieldLabelRow {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 6px;
+}
+
+.fieldLabel {
+    font-size: 0.9em;
+    color: #e0e0e0;
+}
+
+.useDictBtn {
+    background: none;
+    border: 1px solid #50545c;
+    color: #a0a0a0;
+    padding: 4px 8px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.8em;
+}
+
+.useDictBtn:hover {
+    border-color: #7b8089;
+    color: #e0e0e0;
+}
+
+.textarea {
+    width: 100%;
+    min-height: 120px;
+    resize: vertical;
+    background: #1f232a;
+    border: 1px solid #50545c;
+    color: #e0e0e0;
+    border-radius: 6px;
+    padding: 8px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+        "Liberation Mono", "Courier New", monospace;
+    font-size: 12px;
+}
+
+.input {
+    width: 100%;
+    background: #1f232a;
+    border: 1px solid #50545c;
+    color: #e0e0e0;
+    border-radius: 6px;
+    padding: 8px;
+    font-size: 13px;
+}
+
+.select {
+    width: 100%;
+    background: #1f232a;
+    border: 1px solid #50545c;
+    color: #e0e0e0;
+    border-radius: 6px;
+    padding: 8px;
+    font-size: 13px;
+}
+
+.dictBlock {
+    border: 1px solid #50545c;
+    border-radius: 6px;
+    margin-bottom: 12px;
+    overflow: hidden;
+}
+
+.dictHeader {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 10px;
+    background: #3c4048;
+    border-bottom: 1px solid #50545c;
+}
+
+.dictName {
+    color: #e0e0e0;
+    font-weight: 600;
+    font-size: 0.9em;
+}
+
+.dictActions {
+    display: flex;
+    gap: 8px;
+}
+
+.dictActionBtn {
+    background: none;
+    border: 1px solid #50545c;
+    color: #a0a0a0;
+    padding: 4px 8px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.8em;
+}
+
+.dictActionBtn:hover {
+    border-color: #7b8089;
+    color: #e0e0e0;
+}
+
+.dictContent {
+    padding: 10px;
+    background: #1f232a;
+    color: #e0e0e0;
+}
+
+.footer {
+    padding: 10px 16px;
+    border-top: 1px solid #50545c;
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+}
+
+.footerBtn {
+    background-color: #3c4048;
+    color: #e0e0e0;
+    padding: 6px 12px;
+    border: 1px solid #50545c;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.footerBtn:hover {
+    background-color: #4a4e56;
+    border-color: #7b8089;
+}
+
+.primaryBtn {
+    background-color: #61dafb;
+    border-color: #61dafb;
+    color: white;
+}
+
+.primaryBtn:hover {
+    background-color: #4fa3d7;
+    border-color: #4fa3d7;
+}
+
