@@ -9,6 +9,9 @@ interface SandboxedDefinitionBlockProps {
     customJs?: string;
     // onSoundLinkClick 不再需要
     onEntryLinkClick: (word: string) => void;
+    onSelectionChange?: (selection: { html: string; text: string }) => void;
+    isAudioSelectionMode?: boolean;
+    onAudioSelected?: (key: string) => void;
 }
 
 const SandboxedDefinitionBlock: React.FC<SandboxedDefinitionBlockProps> = ({
@@ -17,6 +20,9 @@ const SandboxedDefinitionBlock: React.FC<SandboxedDefinitionBlockProps> = ({
     customCss = "",
     customJs = "",
     onEntryLinkClick,
+    onSelectionChange,
+    isAudioSelectionMode = false,
+    onAudioSelected,
 }) => {
     const iframeRef = useRef<HTMLIFrameElement>(null);
     const [iframeHeight, setIframeHeight] = useState<string>("auto");
@@ -77,7 +83,18 @@ const SandboxedDefinitionBlock: React.FC<SandboxedDefinitionBlockProps> = ({
                 // sound:// 使用 fetch 来触发主进程的 protocol handler，同时避免导航
                 e.preventDefault(); // 关键！阻止默认的导航行为
                 
-                                fetch(href)
+                if (window.isAudioSelectionMode) {
+                    const parts = href.split('?');
+                    const params = new URLSearchParams(parts[1] || '');
+                    const key = params.get('key');
+                    window.parent.postMessage({
+                        type: 'audio-selected',
+                        key: key
+                    }, '*');
+                    return;
+                }
+
+                fetch(href)
                     .then(response => {
                         if (!response.ok) {
                             throw new Error('Network response was not ok for sound file.');
@@ -105,9 +122,39 @@ const SandboxedDefinitionBlock: React.FC<SandboxedDefinitionBlockProps> = ({
         });
         resizeObserver.observe(document.body);
 
+        document.addEventListener('selectionchange', () => {
+            const selection = window.getSelection();
+            if (selection && selection.rangeCount > 0) {
+                const range = selection.getRangeAt(0);
+                if (range.collapsed) return;
+
+                const container = document.createElement('div');
+                container.appendChild(range.cloneContents());
+                const html = container.innerHTML;
+                const text = selection.toString();
+                
+                window.parent.postMessage({
+                    type: 'selection-change',
+                    html: html,
+                    text: text
+                }, '*');
+            }
+        });
+
         window.addEventListener('load', () => {
              const height = document.documentElement.offsetHeight;
              window.parent.postMessage({ type: 'resize', height: height }, '*');
+        });
+
+        window.addEventListener('message', (e) => {
+            if (e.data.type === 'set-audio-mode') {
+                if (e.data.enabled) {
+                    document.body.classList.add('audio-selection-mode');
+                } else {
+                    document.body.classList.remove('audio-selection-mode');
+                }
+                window.isAudioSelectionMode = e.data.enabled;
+            }
         });
         `;
 
@@ -118,6 +165,14 @@ const SandboxedDefinitionBlock: React.FC<SandboxedDefinitionBlockProps> = ({
                 <meta charset="UTF-8">
                 <style>
                     body { margin: 0; padding: 0; font-family: sans-serif; color: #333; }
+                    .audio-selection-mode a[href^='sound://'] {
+                        outline: 2px dashed #61dafb;
+                        background: rgba(97, 218, 251, 0.15);
+                        cursor: copy !important;
+                    }
+                    .audio-selection-mode a[href^='sound://']:hover {
+                        background: rgba(97, 218, 251, 0.3);
+                    }
                     ${customCss}
                 </style>
             </head>
@@ -151,7 +206,7 @@ const SandboxedDefinitionBlock: React.FC<SandboxedDefinitionBlockProps> = ({
                 return;
             }
 
-            const { type, href, height } = event.data; // dictionaryId 仍然从 postMessage 获取，以防万一
+            const { type, href, height, html, text, key } = event.data; // dictionaryId 仍然从 postMessage 获取，以防万一
 
             if (type === "link-click") {
                 // 此时只有 entry:// 会触发这个，sound:// 直接被主进程处理了
@@ -163,6 +218,10 @@ const SandboxedDefinitionBlock: React.FC<SandboxedDefinitionBlockProps> = ({
                 }
             } else if (type === "resize" && typeof height === "number") {
                 setIframeHeight(`${Math.max(height, 20)}px`);
+            } else if (type === "selection-change" && onSelectionChange) {
+                onSelectionChange({ html, text });
+            } else if (type === "audio-selected" && onAudioSelected) {
+                onAudioSelected(key);
             }
         };
 
@@ -171,7 +230,19 @@ const SandboxedDefinitionBlock: React.FC<SandboxedDefinitionBlockProps> = ({
         return () => {
             window.removeEventListener("message", handleMessage);
         };
-    }, [onEntryLinkClick]);
+    }, [onEntryLinkClick, onSelectionChange, onAudioSelected]);
+
+    useEffect(() => {
+        if (iframeRef.current?.contentWindow) {
+            iframeRef.current.contentWindow.postMessage(
+                {
+                    type: "set-audio-mode",
+                    enabled: isAudioSelectionMode,
+                },
+                "*",
+            );
+        }
+    }, [isAudioSelectionMode]);
 
     const isSystemMessage = block.dictionaryId.startsWith("system-");
 
@@ -214,6 +285,17 @@ const SandboxedDefinitionBlock: React.FC<SandboxedDefinitionBlockProps> = ({
                     sandbox="allow-scripts"
                     scrolling="no"
                     frameBorder="0"
+                    onLoad={() => {
+                        if (iframeRef.current?.contentWindow) {
+                            iframeRef.current.contentWindow.postMessage(
+                                {
+                                    type: "set-audio-mode",
+                                    enabled: isAudioSelectionMode,
+                                },
+                                "*",
+                            );
+                        }
+                    }}
                     style={{
                         width: "100%",
                         height: iframeHeight,

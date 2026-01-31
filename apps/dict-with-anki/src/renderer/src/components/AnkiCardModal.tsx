@@ -1,5 +1,8 @@
 import React, { useMemo, useState, useCallback } from "react";
 import styles from "./AnkiCardModal.module.css";
+import SandboxedDefinitionBlock from "./SandboxedDefinitionBlock";
+import { type RenderedDefinitionBlock } from "../App";
+import { useAppContext } from "../AppContext";
 
 export type CardSourceDictionaryBlock = {
     dictionaryId: string;
@@ -38,6 +41,8 @@ const AnkiCardModal: React.FC<AnkiCardModalProps> = ({
     onClose,
     context,
 }) => {
+    const { config, userScripts } = useAppContext();
+
     const initialFieldValues = useMemo(() => {
         // Per requirements: default empty, user chooses a dictionary as starting value.
         const values: Record<string, string> = {};
@@ -49,6 +54,15 @@ const AnkiCardModal: React.FC<AnkiCardModalProps> = ({
 
     const [fieldValues, setFieldValues] =
         useState<Record<string, string>>(initialFieldValues);
+
+    const [lastSelection, setLastSelection] = useState<{
+        html: string;
+        text: string;
+    } | null>(null);
+
+    const [selectingAudioFor, setSelectingAudioFor] = useState<string | null>(
+        null,
+    );
 
     const updateField = useCallback((fieldName: string, value: string) => {
         setFieldValues((prev) => ({ ...prev, [fieldName]: value }));
@@ -62,6 +76,88 @@ const AnkiCardModal: React.FC<AnkiCardModalProps> = ({
         },
         [updateField],
     );
+
+    const fillFieldFromSelection = useCallback(
+        (fieldName: string) => {
+            if (!lastSelection) return;
+            const spec = FIELD_SPECS.find((s) => s.name === fieldName);
+            const value = spec?.multiline
+                ? lastSelection.html
+                : lastSelection.text;
+            updateField(fieldName, value);
+        },
+        [lastSelection, updateField],
+    );
+
+    React.useEffect(() => {
+        if (!isOpen) {
+            setFieldValues(initialFieldValues);
+        }
+    });
+
+    React.useEffect(() => {
+        const handleSelectionChange = () => {
+            const selection = window.getSelection();
+            if (selection && selection.rangeCount > 0) {
+                const range = selection.getRangeAt(0);
+                if (!range.collapsed) {
+                    const rightPanel = document.querySelector(
+                        `.${styles.right}`,
+                    );
+                    if (
+                        rightPanel &&
+                        rightPanel.contains(range.commonAncestorContainer)
+                    ) {
+                        const container = document.createElement("div");
+                        container.appendChild(range.cloneContents());
+                        setLastSelection({
+                            html: container.innerHTML,
+                            text: selection.toString(),
+                        });
+                    }
+                }
+            }
+        };
+
+        document.addEventListener("selectionchange", handleSelectionChange);
+        return () => {
+            document.removeEventListener(
+                "selectionchange",
+                handleSelectionChange,
+            );
+        };
+    }, []);
+
+    React.useEffect(() => {
+        const handleClick = (e: MouseEvent) => {
+            if (!selectingAudioFor) return;
+
+            const target = e.target as HTMLElement;
+            const link = target.closest("a");
+            if (link && link.href) {
+                const href = link.getAttribute("href") || "";
+                if (href.startsWith("sound://")) {
+                    e.preventDefault();
+                    e.stopPropagation();
+
+                    // Same logic as in SandboxedDefinitionBlock
+                    const parts = href.split("?");
+                    const params = new URLSearchParams(parts[1] || "");
+                    const key = params.get("key");
+                    if (key) {
+                        updateField(selectingAudioFor, `[sound:${key}]`);
+                        setSelectingAudioFor(null);
+                    }
+                }
+            }
+        };
+
+        // Capture to intercept clicks before other handlers
+        document.addEventListener("click", handleClick, true);
+        return () => {
+            document.removeEventListener("click", handleClick, true);
+        };
+    }, [selectingAudioFor, updateField]);
 
     const handleSubmit = useCallback(() => {
         const payload = {
@@ -116,17 +212,33 @@ const AnkiCardModal: React.FC<AnkiCardModalProps> = ({
                                             <div className={styles.fieldLabel}>
                                                 {spec.name} (audio)
                                             </div>
+                                            <button
+                                                className={`${styles.useDictBtn} ${selectingAudioFor === spec.name ? styles.active : ""}`}
+                                                onClick={() =>
+                                                    setSelectingAudioFor(
+                                                        selectingAudioFor ===
+                                                            spec.name
+                                                            ? null
+                                                            : spec.name,
+                                                    )
+                                                }
+                                            >
+                                                {selectingAudioFor === spec.name
+                                                    ? "Cancel"
+                                                    : "Select Audio"}
+                                            </button>
                                         </div>
-                                        <select
-                                            className={styles.select}
-                                            disabled
-                                            value={""}
-                                        >
-                                            <option value="">
-                                                TODO: audio selection not
-                                                implemented
-                                            </option>
-                                        </select>
+                                        <input
+                                            className={styles.input}
+                                            value={fieldValues[spec.name] || ""}
+                                            onChange={(e) =>
+                                                updateField(
+                                                    spec.name,
+                                                    e.target.value,
+                                                )
+                                            }
+                                            placeholder="Select audio from right panel"
+                                        />
                                     </div>
                                 );
                             }
@@ -138,6 +250,19 @@ const AnkiCardModal: React.FC<AnkiCardModalProps> = ({
                                         <div className={styles.fieldLabel}>
                                             {spec.name}
                                         </div>
+                                        {lastSelection && (
+                                            <button
+                                                className={styles.useDictBtn}
+                                                onClick={() =>
+                                                    fillFieldFromSelection(
+                                                        spec.name,
+                                                    )
+                                                }
+                                                title="Fill this field with currently selected content from dictionary"
+                                            >
+                                                Fill Selection
+                                            </button>
+                                        )}
                                     </div>
 
                                     {spec.multiline ? (
@@ -170,7 +295,27 @@ const AnkiCardModal: React.FC<AnkiCardModalProps> = ({
                         })}
                     </div>
 
-                    <div className={styles.right}>
+                    <div
+                        className={`${styles.right} ${selectingAudioFor ? styles.selectingAudio : ""}`}
+                    >
+                        {selectingAudioFor && (
+                            <div className={styles.audioModeHint}>
+                                <span>
+                                    Click an audio icon in the dictionary to
+                                    select it for “{selectingAudioFor}”
+                                </span>
+                                <button
+                                    className={styles.dictActionBtn}
+                                    style={{
+                                        color: "inherit",
+                                        borderColor: "currentColor",
+                                    }}
+                                    onClick={() => setSelectingAudioFor(null)}
+                                >
+                                    Cancel
+                                </button>
+                            </div>
+                        )}
                         <p className={styles.sectionTitle}>
                             Dictionary contents (expanded)
                         </p>
@@ -217,14 +362,99 @@ const AnkiCardModal: React.FC<AnkiCardModalProps> = ({
                                         </div>
                                     </div>
 
-                                    <div
-                                        className={styles.dictContent}
-                                        dangerouslySetInnerHTML={{
-                                            __html:
-                                                block.htmlContent ||
-                                                "<i>(empty)</i>",
-                                        }}
-                                    />
+                                    {(() => {
+                                        const dictConfig =
+                                            config?.configs[block.dictionaryId];
+                                        const enabledResources =
+                                            dictConfig?.enabledResources || {};
+                                        const customCss = Object.keys(
+                                            enabledResources,
+                                        )
+                                            .filter(
+                                                (path) =>
+                                                    path.endsWith(".css") &&
+                                                    enabledResources[path],
+                                            )
+                                            .map(
+                                                (path) =>
+                                                    userScripts[path] || "",
+                                            )
+                                            .join("\n");
+
+                                        const customJs = Object.keys(
+                                            enabledResources,
+                                        )
+                                            .filter(
+                                                (path) =>
+                                                    path.endsWith(".js") &&
+                                                    enabledResources[path],
+                                            )
+                                            .map(
+                                                (path) =>
+                                                    userScripts[path] || "",
+                                            )
+                                            .join("\n");
+
+                                        const isSystemBlock =
+                                            block.dictionaryId.startsWith(
+                                                "system-",
+                                            );
+
+                                        const renderBlock: RenderedDefinitionBlock =
+                                            {
+                                                id: block.dictionaryId,
+                                                dictionaryId:
+                                                    block.dictionaryId,
+                                                dictionaryName:
+                                                    block.dictionaryName,
+                                                htmlContent:
+                                                    block.htmlContent ||
+                                                    "<i>(empty)</i>",
+                                                isLoading: false,
+                                            };
+
+                                        if (isSystemBlock) {
+                                            return (
+                                                <div
+                                                    className={
+                                                        styles.dictContent
+                                                    }
+                                                    dangerouslySetInnerHTML={{
+                                                        __html:
+                                                            block.htmlContent ||
+                                                            "<i>(empty)</i>",
+                                                    }}
+                                                />
+                                            );
+                                        }
+
+                                        return (
+                                            <SandboxedDefinitionBlock
+                                                block={renderBlock}
+                                                isFirst={false}
+                                                onEntryLinkClick={() => {}}
+                                                onSelectionChange={
+                                                    setLastSelection
+                                                }
+                                                onAudioSelected={(key) => {
+                                                    if (selectingAudioFor) {
+                                                        updateField(
+                                                            selectingAudioFor,
+                                                            `[sound:${key}]`,
+                                                        );
+                                                        setSelectingAudioFor(
+                                                            null,
+                                                        );
+                                                    }
+                                                }}
+                                                isAudioSelectionMode={
+                                                    !!selectingAudioFor
+                                                }
+                                                customCss={customCss}
+                                                customJs={customJs}
+                                            />
+                                        );
+                                    })()}
                                 </div>
                             ))
                         )}

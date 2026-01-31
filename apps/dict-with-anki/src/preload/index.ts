@@ -43,6 +43,35 @@ export interface FullConfig {
     scanPaths: string[];
 }
 
+// --- AI Types ---
+
+export interface AIProviderConfig {
+    provider: "openai" | "anthropic" | "custom";
+    apiKey: string;
+    baseUrl?: string;
+    model: string;
+    enabled: boolean;
+}
+
+export interface CardGenerationRequest {
+    word: string;
+    dictionaryContents: Array<{
+        dictionaryName: string;
+        htmlContent: string;
+    }>;
+    targetLanguage?: string;
+    nativeLanguage?: string;
+}
+
+export interface CardGenerationResult {
+    front: string;
+    back: string;
+    notes?: string;
+    exampleSentences?: string[];
+    pronunciation?: string;
+    partOfSpeech?: string;
+}
+
 export interface ElectronAPI {
     // --- 运行时查询 API ---
     lookup: (word: string) => Promise<LookupResult[]>;
@@ -80,6 +109,20 @@ export interface ElectronAPI {
     // --- 事件监听 API ---
     onConfigUpdated: (callback: () => void) => () => void;
     openPathInExplorer: (path: string) => Promise<void>; // 新增方法
+
+    // --- AI API ---
+    aiGetConfig: () => Promise<AIProviderConfig>;
+    aiUpdateConfig: (config: AIProviderConfig) => Promise<boolean>;
+    aiGenerateCard: (
+        request: CardGenerationRequest,
+    ) => Promise<CardGenerationResult>;
+    aiGenerateExamples: (word: string, count?: number) => Promise<string[]>;
+    aiSummarizeCloze: (word: string, definition: string) => Promise<string>;
+    aiExtractInfo: (htmlContent: string) => Promise<{
+        definitions: string[];
+        partOfSpeech?: string;
+        pronunciation?: string;
+    }>;
 }
 
 // --- 实现 API ---
@@ -130,6 +173,23 @@ const api: ElectronAPI = {
     },
     openPathInExplorer: (path) =>
         ipcRenderer.invoke("system:open-path-in-explorer", path),
+
+    // --- AI API ---
+    aiGetConfig: () => ipcRenderer.invoke("ai:get-config"),
+
+    aiUpdateConfig: (config) => ipcRenderer.invoke("ai:update-config", config),
+
+    aiGenerateCard: (request) =>
+        ipcRenderer.invoke("ai:generate-card", request),
+
+    aiGenerateExamples: (word, count = 3) =>
+        ipcRenderer.invoke("ai:generate-examples", word, count),
+
+    aiSummarizeCloze: (word, definition) =>
+        ipcRenderer.invoke("ai:summarize-cloze", word, definition),
+
+    aiExtractInfo: (htmlContent) =>
+        ipcRenderer.invoke("ai:extract-info", htmlContent),
 };
 
 // --- 安全地暴露 API 到渲染进程 ---
